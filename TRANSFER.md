@@ -117,8 +117,12 @@ Never print, echo, or commit any of these values.
 
 ## 5. Set up on the PC and push to GitHub
 
-The repo is **not yet under git**. Target remote:
-`https://github.com/Krist-Kul/sarai-ai.git`
+The repo **is already under git** and travels with its history. One commit on
+`main`, remote `origin` already set to
+`https://github.com/Krist-Kul/sarai-ai.git`. Nothing has been pushed yet.
+
+Copy the `.git/` directory along with the working tree, or the history is lost
+and you are back to `git init`.
 
 ### 5.1 Install
 
@@ -157,40 +161,28 @@ make check      # ruff, mypy --strict, types drift, pytest, web tsc
 
 All of it must be green. 92 tests at time of writing.
 
-### 5.3 First commit and push
+### 5.3 Push
 
-Check the ignore rules are doing their job **before** the first commit — this is
-the step where secrets and an 82 MB private recording would leak:
-
-```bash
-git init
-git add -A
-git status --short          # inspect this list carefully
-```
-
-The list must contain **no** `.env`, no `data/`, no `sample/`, no `.venv/`,
-no `node_modules/`. If any of them appear, stop and fix `.gitignore` first.
-Also confirm the recording is not staged:
+Re-check the ignore rules on the new machine before pushing — this is the step
+where secrets or the 82 MB private recording would leak:
 
 ```bash
-git status --short | grep -iE "\.env$|^..data/|^..sample/|\.mp4$|\.mp3$|\.wav$"
+git status --short                     # should be clean, or only intended changes
+git ls-files | grep -iE "\.env$|^data/|^sample/|\.mp4$|\.mp3$|\.wav$"
 # must print nothing
 ```
+
+If anything shows up there, stop and fix it before pushing — a secret in a
+pushed commit is not fixed by a later commit that removes it.
 
 Then:
 
 ```bash
-git commit -m "feat: Thai meeting minutes pipeline through Phase 3
-
-Phases 0-3: skeleton, streaming upload, local ASR with diarization,
-and the job pipeline with SSE progress and crash recovery."
-git branch -M main
-git remote add origin https://github.com/Krist-Kul/sarai-ai.git
 git push -u origin main
 ```
 
-Ask the user before pushing — pushing publishes the code, and it is their
-account and their repo.
+Ask the user before pushing. Pushing publishes the code to their account, and
+it is their call, not yours.
 
 `.github/workflows/ci.yml` runs on push. Note it installs only the `api` and
 `dev` groups, while several tests import `numpy` through `sarai.worker.*`. If
