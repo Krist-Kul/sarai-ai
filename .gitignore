@@ -1,0 +1,15 @@
+.env
+data/
+# Real meeting recordings used for hand-verification. Private audio, and the
+# files are tens of MB -- they stay on the machine that made them.
+sample/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+web/dist/
+web/tsconfig.tsbuildinfo
+.DS_Store

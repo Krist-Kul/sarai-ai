@@ -1,0 +1,57 @@
+# Single Docker host deployment. api, worker and web share one bind-mounted
+# data volume: the jobs table in SQLite is the queue, so both processes need
+# the same filesystem.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    environment:
+      DATA_DIR: /data
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment:
+      DATA_DIR: /data
+      HF_HOME: /data/hf-cache
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    # One worker only: it owns the GPU and the model weights. Scaling this to
+    # 2 is safe for the queue (claims are atomic) but will OOM a single card.
+    deploy:
+      replicas: 1
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  web:
+    build:
+      context: ./web
+      dockerfile: ../docker/web.Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    restart: unless-stopped

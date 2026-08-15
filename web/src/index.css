@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Sarabun", ui-sans-serif, system-ui, sans-serif;
+  --font-thai: "Sarabun", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+  --color-ink-900: oklch(0.21 0.02 260);
+  --color-ink-600: oklch(0.48 0.02 260);
+  --color-ink-400: oklch(0.65 0.02 260);
+  --color-brand-600: oklch(0.55 0.16 258);
+  --color-brand-500: oklch(0.62 0.16 258);
+  --color-brand-200: oklch(0.85 0.07 258);
+  --color-brand-50: oklch(0.97 0.02 258);
+}
+
+html {
+  /* Thai has taller ascenders/descenders than Latin; the default line-height
+     clips วรรณยุกต์ (tone marks) against the line above. */
+  line-height: 1.7;
+}
+
+body {
+  @apply bg-slate-50 text-ink-900 antialiased;
+  font-family: var(--font-sans);
+}
+
+:lang(th) {
+  font-family: var(--font-thai);
+}
