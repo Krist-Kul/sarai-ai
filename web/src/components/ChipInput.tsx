@@ -24,20 +24,20 @@ export function ChipInput({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-2 focus-within:border-brand-500">
+    <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-line bg-surface p-2 focus-within:border-brand-600">
       {values.map((term, i) => (
         <span
           key={term}
-          className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-2 py-1 text-sm text-brand-600"
+          className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-0.5 text-[13px] font-semibold text-brand-600"
         >
           {term}
           <button
             type="button"
             aria-label={`remove ${term}`}
             onClick={() => onChange(values.filter((_, j) => j !== i))}
-            className="text-brand-600/70 hover:text-brand-600"
+            className="opacity-60 hover:opacity-100"
           >
-            ×
+            ✕
           </button>
         </span>
       ))}
@@ -54,7 +54,7 @@ export function ChipInput({
         }}
         onBlur={() => commit(draft)}
         placeholder={t("glossaryPlaceholder")}
-        className="min-w-40 flex-1 border-0 px-1 py-0.5 text-sm outline-none"
+        className="min-w-32 flex-1 border-0 bg-transparent px-1 py-0.5 text-[13px] outline-none placeholder:text-ink-400"
       />
     </div>
   );

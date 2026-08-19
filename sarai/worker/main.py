@@ -23,7 +23,7 @@ from sarai import db
 from sarai.config import get_settings
 from sarai.models import Job, JobKind, Stage
 from sarai.worker import stages
-from sarai.worker.stages import StageNotImplemented
+from sarai.worker.stages import StageFailed, StageNotImplemented
 
 log = logging.getLogger("sarai.worker")
 
@@ -131,7 +131,7 @@ def run_job(conn: sqlite3.Connection, job: Job) -> None:
 
 def handle_failure(conn: sqlite3.Connection, job: Job, exc: Exception, max_attempts: int) -> None:
     message = f"{type(exc).__name__}: {exc}"
-    retryable = not isinstance(exc, StageNotImplemented)
+    retryable = not isinstance(exc, StageNotImplemented | StageFailed)
     if retryable and job.attempts < max_attempts:
         log.warning("job=%s attempt %s failed, requeueing: %s", job.id, job.attempts, message)
         db.requeue_job(conn, job.id, f"retrying after error: {message}")

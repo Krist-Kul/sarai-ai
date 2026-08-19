@@ -7,17 +7,19 @@ import { LangContext, loadLang, saveLang, useI18n, type Lang } from "./lib/i18n"
 import { MeetingsPage } from "./pages/MeetingsPage";
 import { NewMeetingPage } from "./pages/NewMeetingPage";
 import { MeetingPage } from "./pages/MeetingPage";
+import { ReviewPage } from "./pages/ReviewPage";
+import { MinutesPage } from "./pages/MinutesPage";
 
 function LanguageToggle() {
   const { lang, setLang } = useI18n();
   return (
-    <div className="flex rounded-lg border border-slate-300 bg-white p-0.5 text-xs font-medium">
+    <div className="flex rounded-full border border-line bg-surface p-0.5 text-xs font-semibold cursor-pointer">
       {(["th", "en"] as const).map((code) => (
         <button
           key={code}
           onClick={() => setLang(code)}
-          className={`rounded-md px-2.5 py-1 ${
-            lang === code ? "bg-brand-600 text-white" : "text-ink-600 hover:bg-slate-100"
+          className={`rounded-full px-2.5 py-1 cursor-pointer ${
+            lang === code ? "bg-ink-900 text-surface" : "text-ink-600 hover:text-ink-900"
           }`}
         >
           {code === "th" ? "ไทย" : "EN"}
@@ -37,8 +39,11 @@ function WorkerBanner() {
   });
   if (!data || data.worker_alive) return null;
   return (
-    <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900">
-      {t("workerDown")}
+    <div className="border-b border-warn-line bg-warn-50 px-4 py-2.5 text-sm text-warn-700 sm:px-6">
+      <div className="mx-auto flex max-w-6xl items-center gap-2.5">
+        <span className="size-1.5 shrink-0 rounded-full bg-warn-500" aria-hidden />
+        {t("workerDown")}
+      </div>
     </div>
   );
 }
@@ -46,24 +51,31 @@ function WorkerBanner() {
 function Header() {
   const { t } = useI18n();
   const linkClass = ({ isActive }: { isActive: boolean }) =>
-    `rounded-lg px-3 py-1.5 text-sm font-medium ${
-      isActive ? "bg-slate-100 text-ink-900" : "text-ink-600 hover:bg-slate-100"
+    `rounded-full px-3.5 py-1.5 text-sm ${
+      isActive ? "bg-sand font-semibold text-ink-900" : "text-ink-600 hover:text-ink-900"
     }`;
   return (
-    <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3">
-        <Link to="/" className="flex items-baseline gap-2">
-          <span className="text-lg font-semibold tracking-tight">{t("appName")}</span>
-          <span className="hidden text-xs text-ink-400 sm:inline">{t("tagline")}</span>
+    <header className="border-b border-line bg-surface">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
+        <Link to="/" className="flex items-center gap-2.5">
+          <span className="flex size-7 items-center justify-center rounded-[9px] bg-brand-600 text-sm font-bold text-white">
+            S
+          </span>
+          <span className="text-[17px] font-bold tracking-tight">{t("appName")}</span>
+          <span className="hidden text-xs text-ink-400 md:inline">{t("tagline")}</span>
         </Link>
-        <nav className="ml-auto flex items-center gap-1">
+        <nav className="ml-auto flex items-center gap-1.5">
           <NavLink to="/" end className={linkClass}>
             {t("meetings")}
           </NavLink>
-          <NavLink to="/new" className={linkClass}>
-            {t("newMeeting")}
-          </NavLink>
           <LanguageToggle />
+          <Link
+            to="/new"
+            className="ml-1 rounded-full bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-600/90"
+          >
+            <span aria-hidden>＋ </span>
+            {t("newMeeting")}
+          </Link>
         </nav>
       </div>
     </header>
@@ -89,11 +101,13 @@ export default function App() {
       <div className="min-h-screen">
         <WorkerBanner />
         <Header />
-        <main className="mx-auto max-w-5xl px-4 py-8">
+        <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-9">
           <Routes>
             <Route path="/" element={<MeetingsPage />} />
             <Route path="/new" element={<NewMeetingPage />} />
             <Route path="/meetings/:id" element={<MeetingPage />} />
+            <Route path="/meetings/:id/review" element={<ReviewPage />} />
+            <Route path="/meetings/:id/minutes" element={<MinutesPage />} />
           </Routes>
         </main>
       </div>

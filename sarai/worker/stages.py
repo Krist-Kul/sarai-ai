@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from sarai import audio, db, storage
+from sarai.config import get_settings
 from sarai.models import Job, Segment, Stage
 
 log = logging.getLogger("sarai.worker.stages")
@@ -29,6 +30,12 @@ DIARIZE_DONE = 0.25
 
 class StageNotImplemented(RuntimeError):
     """A stage that a later build phase will fill in."""
+
+
+class StageFailed(RuntimeError):
+    """A failure that retrying cannot fix -- a missing API key, a provider
+    refusal, a transcript that is not there. Retrying these three times only
+    delays the message the user needs to read."""
 
 
 def _progress(conn: sqlite3.Connection, job: Job, stage: Stage, pct: float, detail: str) -> None:
@@ -157,7 +164,70 @@ def diarize_and_transcribe(conn: sqlite3.Connection, job: Job, wav: Path) -> lis
 
 
 def summarize(conn: sqlite3.Connection, job: Job) -> None:
-    raise StageNotImplemented("Summarization is not built yet (Phase 5).")
+    """Transcript -> minutes -> .docx.
+
+    Two stages in one job: `summarizing` is the LLM call (or calls, for a long
+    meeting), `rendering` is python-docx. They are split because the first can
+    take minutes and the second is always quick, and a user watching a stalled
+    progress bar deserves to know which one they are waiting on.
+    """
+    import asyncio
+
+    from sarai import docgen
+    from sarai.llm import LLMError, summarize_minutes
+    from sarai.models import SummarizeInput
+
+    settings = get_settings()
+    meeting = db.get_meeting(conn, job.meeting_id)
+    if meeting is None:
+        raise RuntimeError(f"Meeting {job.meeting_id} disappeared before summarization")
+
+    transcript = db.get_transcript(conn, meeting.id)
+    if transcript is None:
+        raise StageFailed(
+            "This meeting has no transcript yet. Transcribe it before generating minutes."
+        )
+
+    inp = SummarizeInput(
+        title=meeting.title,
+        meeting_date=meeting.meeting_date,
+        attendees=meeting.attendees,
+        glossary=meeting.glossary,
+        segments=transcript.segments,
+        speakers=transcript.speakers,
+    )
+
+    _progress(
+        conn,
+        job,
+        Stage.SUMMARIZING,
+        0.1,
+        f"sending {len(transcript.segments)} segments to {settings.llm_provider}",
+    )
+
+    def on_progress(fraction: float, detail: str) -> None:
+        # The summarize stage owns 0.1..0.8 of the job; rendering owns the rest.
+        _progress(conn, job, Stage.SUMMARIZING, 0.1 + 0.7 * fraction, detail)
+
+    try:
+        minutes, model, dropped = asyncio.run(
+            summarize_minutes(inp, settings, on_progress=on_progress)
+        )
+    except LLMError as exc:
+        # A provider refusal or a missing key is not worth three retries.
+        raise StageFailed(str(exc)) from exc
+
+    if dropped:
+        log.warning("job=%s dropped %d action item(s) with unverifiable quotes", job.id, dropped)
+
+    _progress(conn, job, Stage.RENDERING, 0.85, "rendering the .docx")
+    path = docgen.render(minutes, storage.docx_path(meeting.id), model=model)
+    db.save_summary(conn, meeting.id, minutes, model, str(path))
+
+    detail = f"{len(minutes.action_items)} action item(s)"
+    if dropped:
+        detail += f", {dropped} dropped for unverifiable quotes"
+    _progress(conn, job, Stage.RENDERING, 0.95, detail)
 
 
 def run_transcribe_job(conn: sqlite3.Connection, job: Job) -> None:

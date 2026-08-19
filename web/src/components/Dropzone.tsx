@@ -39,14 +39,27 @@ export function Dropzone({
         }}
         role="button"
         tabIndex={0}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 text-center transition ${
-          over ? "border-brand-500 bg-brand-50" : "border-slate-300 bg-white hover:border-brand-500"
-        }`}
+        className={`cursor-pointer rounded-2xl border-2 border-dashed transition ${
+          over ? "border-brand-600 bg-brand-50" : "border-brand-200 bg-brand-25 hover:border-brand-600"
+        } ${file ? "p-5" : "px-6 py-10"}`}
       >
         {file ? (
-          <>
-            <p className="font-medium break-all">{file.name}</p>
-            <p className="mt-1 text-sm text-ink-600">{formatBytes(file.size)}</p>
+          <div className="flex items-center gap-4">
+            <span
+              className="flex size-13 flex-none items-center justify-center rounded-2xl bg-brand-50 text-xl text-brand-600"
+              aria-hidden
+            >
+              ♪
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[15px] font-semibold">{file.name}</p>
+              <p className="text-[12.5px] text-ink-600">
+                {formatBytes(file.size)} · {t("fileReady")}
+              </p>
+              <div className="mt-2 h-1.5 max-w-[420px] overflow-hidden rounded-full bg-sand">
+                <span className="block h-full w-full rounded-full bg-ok-600" />
+              </div>
+            </div>
             <button
               type="button"
               onClick={(e) => {
@@ -54,16 +67,16 @@ export function Dropzone({
                 onSelect(null);
                 if (inputRef.current) inputRef.current.value = "";
               }}
-              className="mt-3 text-sm text-brand-600 underline"
+              className="flex-none rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink-600 hover:text-ink-900"
             >
-              {t("cancel")}
+              {t("replaceFile")}
             </button>
-          </>
+          </div>
         ) : (
-          <>
-            <p className="font-medium">{t("dropzone")}</p>
+          <div className="text-center">
+            <p className="font-semibold">{t("dropzone")}</p>
             <p className="mt-1 text-sm text-ink-600">{t("dropzoneHint")}</p>
-          </>
+          </div>
         )}
         <input
           ref={inputRef}
@@ -73,7 +86,9 @@ export function Dropzone({
           onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
         />
       </div>
-      <p className="mt-2 text-xs text-ink-600">{t("privacyNote")}</p>
+      <p className="mt-2.5 px-0.5 text-[12.5px] text-ink-600">
+        <span aria-hidden>🔒</span> {t("privacyNote")}
+      </p>
     </div>
   );
 }

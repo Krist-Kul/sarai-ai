@@ -36,7 +36,7 @@ export const strings = {
   title: { th: "หัวข้อการประชุม", en: "Meeting title" },
   date: { th: "วันที่ประชุม", en: "Meeting date" },
   language: { th: "ภาษา", en: "Language" },
-  langAuto: { th: "ตรวจอัตโนมัติ", en: "Auto-detect" },
+  langAuto: { th: "อัตโนมัติ", en: "Auto" },
   langTh: { th: "ไทย", en: "Thai" },
   langEn: { th: "อังกฤษ", en: "English" },
   attendees: { th: "ผู้เข้าร่วมประชุม", en: "Attendees" },
@@ -104,6 +104,124 @@ export const strings = {
   stageRendering: { th: "สร้างเอกสาร", en: "Rendering" },
   stageDone: { th: "เสร็จสิ้น", en: "Done" },
   stageFailed: { th: "ล้มเหลว", en: "Failed" },
+
+  meetingsSummary: {
+    th: "{n} การประชุม · รอคุณ {k} รายการ",
+    en: "{n} meetings · {k} need you",
+  },
+  searchMeetings: { th: "ค้นหาการประชุม", en: "Search meetings" },
+  filterAll: { th: "ทั้งหมด", en: "All" },
+  filterAttention: { th: "รอคุณ", en: "Needs you" },
+  filterActive: { th: "กำลังทำงาน", en: "In progress" },
+  filterDone: { th: "เสร็จแล้ว", en: "Finished" },
+  noMatches: {
+    th: "ไม่มีการประชุมที่ตรงกับที่ค้นหา",
+    en: "No meetings match this filter.",
+  },
+  clearFilters: { th: "ล้างตัวกรอง", en: "Clear filters" },
+  actionWatch: { th: "ดูความคืบหน้า", en: "Watch progress" },
+  actionReview: { th: "ตรวจทานข้อความ", en: "Review transcript" },
+  actionOpen: { th: "เปิดรายงาน", en: "Open minutes" },
+  actionDetails: { th: "ดูรายละเอียด", en: "View details" },
+  // Phone-width labels: the row keeps everything on one line, so the verb
+  // alone has to carry it.
+  actionWatchShort: { th: "ดู", en: "Watch" },
+  actionReviewShort: { th: "ตรวจทาน", en: "Review" },
+  actionOpenShort: { th: "เปิด", en: "Open" },
+  actionDetailsShort: { th: "รายละเอียด", en: "Details" },
+  speakersDetected: { th: "พบผู้พูด {n} คน", en: "{n} speakers detected" },
+
+  uploadStep: { th: "ขั้นที่ 1 จาก 4 · อัปโหลด", en: "Step 1 of 4 · Upload" },
+  fileReady: { th: "พร้อมอัปโหลด", en: "ready to upload" },
+  replaceFile: { th: "เปลี่ยนไฟล์", en: "Replace" },
+  meetingDetails: { th: "รายละเอียดการประชุม", en: "Meeting details" },
+  helpTitle: { th: "ช่วยให้ถอดเสียงแม่นยำขึ้น", en: "Help the transcription" },
+  helpSubtitle: {
+    th: "ไม่บังคับ — แต่ชื่อคนและศัพท์เฉพาะจะออกมาถูกต้องขึ้นชัดเจน",
+    en: "Optional — but names and jargon come out measurably better",
+  },
+  hide: { th: "ซ่อน", en: "Hide" },
+  show: { th: "แสดง", en: "Show" },
+  submitNote: {
+    th: "ถอดเสียงบนเครื่องนี้ ใช้เวลาราวหนึ่งในสิบของความยาวไฟล์ ปิดแท็บได้เลย",
+    en: "Transcribing runs on this machine at roughly a tenth of the recording length. You can close the tab.",
+  },
+
+  currentStep: { th: "ขั้นตอนตอนนี้", en: "Current step" },
+  nextUp: { th: "ขั้นต่อไป", en: "Next up" },
+  cancelJobHint: {
+    th: "หยุดงานได้ด้วยการลบการประชุมนี้",
+    en: "To stop this job, delete the meeting.",
+  },
+  listen: { th: "ฟังไฟล์เสียง", en: "Listen to the recording" },
+  reviewReady: {
+    th: "ถอดเสียงเสร็จแล้ว ตั้งชื่อผู้พูดและแก้ข้อความให้ถูกต้อง แล้วจึงสร้างรายงาน",
+    en: "Transcription is done. Name the speakers and fix the text, then generate the minutes.",
+  },
+
+  // --- review screen ---
+  reviewTitle: { th: "ตรวจทานข้อความ", en: "Review transcript" },
+  speakers: { th: "ผู้พูด", en: "Speakers" },
+  segmentCount: { th: "{n} ช่วงการพูด", en: "{n} segments" },
+  searchTranscript: { th: "ค้นหาในข้อความ", en: "Search the transcript" },
+  filterUnnamed: { th: "ยังไม่ตั้งชื่อ", en: "Unnamed speakers" },
+  filterLowConfidence: { th: "ความมั่นใจต่ำ", en: "Low confidence" },
+  filterEdited: { th: "ที่แก้ไขแล้ว", en: "Edited by me" },
+  followPlayback: { th: "เลื่อนตามเสียง", en: "Follow playback" },
+  speakersHint: { th: "ตั้งชื่อครั้งเดียว ใช้ทั้งบทสนทนา", en: "Rename once — it applies everywhere." },
+  nameThisSpeaker: { th: "ตั้งชื่อผู้พูดนี้…", en: "Name this speaker…" },
+  reassignSpeaker: { th: "เปลี่ยนผู้พูด", en: "Reassign speaker" },
+  lowConfidenceHint: {
+    th: "ความมั่นใจ {n}% — ควรฟังซ้ำ",
+    en: "{n}% confidence — worth listening again",
+  },
+  generateMinutes: { th: "สร้างรายงานการประชุม", en: "Generate minutes" },
+  play: { th: "เล่น", en: "Play" },
+  pause: { th: "หยุด", en: "Pause" },
+  seek: { th: "เลื่อนตำแหน่งเสียง", en: "Seek" },
+  spaceToPlay: { th: "กด Space เพื่อเล่น/หยุด", en: "Space plays and pauses" },
+  saving: { th: "กำลังบันทึก…", en: "Saving…" },
+  allSaved: { th: "บันทึกแล้วทั้งหมด", en: "All changes saved" },
+  unsaved: { th: "ยังไม่ได้บันทึก", en: "Unsaved changes" },
+  saveFailed: { th: "บันทึกไม่สำเร็จ", en: "Could not save" },
+
+  // --- minutes screen ---
+  minutes: { th: "รายงานการประชุม", en: "Minutes" },
+  contents: { th: "สารบัญ", en: "Contents" },
+  sectionSummary: { th: "สรุปผู้บริหาร", en: "Executive summary" },
+  sectionAgenda: { th: "วาระการประชุม", en: "Agenda" },
+  sectionDiscussion: { th: "รายละเอียดการประชุม", en: "Discussion" },
+  sectionDecisions: { th: "มติที่ประชุม", en: "Decisions" },
+  sectionActions: { th: "สิ่งที่ต้องดำเนินการ", en: "Action items" },
+  sectionQuestions: { th: "ประเด็นค้าง", en: "Open questions" },
+  sectionNextMeeting: { th: "การประชุมครั้งต่อไป", en: "Next meeting" },
+  minutesEditableNote: {
+    th: "แก้ไขได้ทุกส่วน ไฟล์ .docx จะถูกสร้างใหม่ทุกครั้งที่บันทึก",
+    en: "Everything here is editable. The .docx is re-rendered on every save.",
+  },
+  task: { th: "สิ่งที่ต้องทำ", en: "Task" },
+  owner: { th: "ผู้รับผิดชอบ", en: "Owner" },
+  due: { th: "กำหนดส่ง", en: "Due" },
+  rationale: { th: "เหตุผล", en: "Rationale" },
+  addActionItem: { th: "เพิ่มรายการ", en: "Add action item" },
+  regenerate: { th: "สร้างใหม่", en: "Regenerate" },
+  regenerateQueued: {
+    th: "ส่งคำขอสร้างรายงานใหม่แล้ว รายงานเดิมจะถูกแทนที่เมื่อเสร็จ",
+    en: "Regeneration queued. The current minutes are replaced when it finishes.",
+  },
+  downloadDocx: { th: "ดาวน์โหลด .docx", en: "Download .docx" },
+  noMinutesTitle: { th: "ยังไม่มีรายงานการประชุม", en: "No minutes yet" },
+  noMinutesBody: {
+    th: "ตรวจทานข้อความให้เรียบร้อยแล้วกดสร้างรายงาน",
+    en: "Review the transcript, then generate the minutes from that screen.",
+  },
+  stepNormalizingHint: { th: "แปลงเป็น 16 kHz โมโน", en: "Converting to 16 kHz mono" },
+  stepDiarizingHint: { th: "แยกว่าใครพูดช่วงไหน", en: "Working out who speaks when" },
+  stepTranscribingHint: { th: "ถอดเสียงทีละช่วงการพูด", en: "Writing the transcript, turn by turn" },
+  stepReviewHint: {
+    th: "คุณตั้งชื่อผู้พูด แล้วจึงสร้างรายงาน",
+    en: "You name the speakers, then generate minutes",
+  },
 } satisfies Record<string, Entry>;
 
 export type StringKey = keyof typeof strings;
@@ -113,9 +231,19 @@ export const LangContext = createContext<{ lang: Lang; setLang: (l: Lang) => voi
   setLang: () => {},
 });
 
+/** `{name}` placeholders, filled from a plain object. Thai and English put the
+ *  same numbers in different places, so the order lives in the string. */
+function fill(template: string, vars?: Record<string, string | number>): string {
+  if (!vars) return template;
+  return template.replace(/\{(\w+)\}/g, (match, key: string) =>
+    key in vars ? String(vars[key]) : match,
+  );
+}
+
 export function useI18n() {
   const { lang, setLang } = useContext(LangContext);
-  const t = (key: StringKey): string => strings[key][lang];
+  const t = (key: StringKey, vars?: Record<string, string | number>): string =>
+    fill(strings[key][lang], vars);
   return { lang, setLang, t };
 }
 

@@ -9,6 +9,10 @@ import type {
   MeetingCreated,
   MeetingDetail,
   MeetingListItem,
+  MinutesJSON,
+  Segment,
+  SummaryResponse,
+  TranscriptResponse,
 } from "../types";
 
 export class ApiError extends Error {
@@ -52,6 +56,33 @@ export const api = {
   deleteMeeting: (id: string) =>
     request<void>(`/api/meetings/${id}`, { method: "DELETE" }),
   audioUrl: (id: string) => `/api/meetings/${id}/audio`,
+
+  // --- review ---
+  getTranscript: (id: string) => request<TranscriptResponse>(`/api/meetings/${id}/transcript`),
+  saveTranscript: (id: string, segments: Segment[]) =>
+    request<TranscriptResponse>(`/api/meetings/${id}/transcript`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ segments }),
+    }),
+  saveSpeakers: (id: string, speakers: Record<string, string>) =>
+    request<Record<string, string>>(`/api/meetings/${id}/speakers`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ speakers }),
+    }),
+
+  // --- minutes ---
+  summarize: (id: string) =>
+    request<MeetingCreated>(`/api/meetings/${id}/summarize`, { method: "POST" }),
+  getSummary: (id: string) => request<SummaryResponse>(`/api/meetings/${id}/summary`),
+  saveSummary: (id: string, minutes: MinutesJSON) =>
+    request<SummaryResponse>(`/api/meetings/${id}/summary`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(minutes),
+    }),
+  documentUrl: (id: string) => `/api/meetings/${id}/document`,
 
   createMeeting: (input: {
     file: File;

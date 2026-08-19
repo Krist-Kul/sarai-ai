@@ -186,3 +186,55 @@ def test_degraded_diarization_labels_everything_speaker_00(
     assert turns[-1].end == pytest.approx(50.0)
     # A 50s file still gets split, so no single ASR call exceeds the 30s window.
     assert all(t.duration <= diarize.MAX_TURN_SECONDS for t in turns)
+
+
+def _meeting(auto_summarize: bool) -> tuple[str, Job]:
+    meeting_id = uuid.uuid4().hex
+    with db.connection() as conn:
+        db.create_meeting(
+            conn,
+            Meeting(
+                id=meeting_id,
+                title="ประชุมอัตโนมัติ",
+                source_file="m.mp3",
+                audio_path=str(storage.wav_path(meeting_id)),
+                auto_summarize=auto_summarize,
+                created_at=db.utcnow(),
+            ),
+        )
+        job = db.create_job(conn, uuid.uuid4().hex, meeting_id, JobKind.TRANSCRIBE)
+    return meeting_id, job
+
+
+def test_auto_summarize_queues_minutes_and_the_ui_follows_the_new_job() -> None:
+    meeting_id, job = _meeting(auto_summarize=True)
+
+    with db.connection() as conn:
+        db.update_job(conn, job.id, stage=Stage.AWAITING_REVIEW, progress=1.0, release=True)
+        summarize_id = stages.chain_summarize(conn, job)
+        detail = db.get_meeting_detail(conn, meeting_id)
+
+    assert summarize_id is not None
+    # The meeting page watches the latest job per meeting; it has to be this one.
+    assert detail is not None
+    assert detail.job_id == summarize_id
+    assert detail.stage is Stage.QUEUED
+
+
+def test_review_first_upload_queues_nothing() -> None:
+    _, job = _meeting(auto_summarize=False)
+
+    with db.connection() as conn:
+        assert stages.chain_summarize(conn, job) is None
+
+
+def test_auto_summarize_is_ignored_when_the_llm_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A queued job that can only fail is worse than parking at awaiting_review."""
+    _, job = _meeting(auto_summarize=True)
+    monkeypatch.setenv("LLM_ENABLED", "false")
+    get_settings.cache_clear()
+
+    with db.connection() as conn:
+        assert stages.chain_summarize(conn, job) is None

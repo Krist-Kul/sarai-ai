@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from sarai import db
-from sarai.api.routes import events, health, meetings
+from sarai.api.routes import events, health, meetings, summary, transcript
 from sarai.config import get_settings
 
 log = logging.getLogger("sarai.api")
@@ -47,6 +47,8 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router, prefix="/api")
     app.include_router(meetings.router, prefix="/api")
+    app.include_router(transcript.router, prefix="/api")
+    app.include_router(summary.router, prefix="/api")
     app.include_router(events.router, prefix="/api")
     return app
 

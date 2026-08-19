@@ -1,15 +1,43 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", "Sarabun", ui-sans-serif, system-ui, sans-serif;
-  --font-thai: "Sarabun", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
-  --color-ink-900: oklch(0.21 0.02 260);
-  --color-ink-600: oklch(0.48 0.02 260);
-  --color-ink-400: oklch(0.65 0.02 260);
-  --color-brand-600: oklch(0.55 0.16 258);
-  --color-brand-500: oklch(0.62 0.16 258);
-  --color-brand-200: oklch(0.85 0.07 258);
-  --color-brand-50: oklch(0.97 0.02 258);
+  /* Sarabun carries both scripts, so one family keeps Thai and Latin on the
+     same rhythm instead of two fonts fighting over the same line. */
+  --font-sans: "Sarabun", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, Menlo, monospace;
+
+  /* Warm neutrals rather than cool greys: this screen is read for long
+     stretches, often under office fluorescents, where pure white glares. */
+  --color-canvas: #f7f3ec;
+  --color-surface: #fffdfa;
+  --color-line: #e6ded1;
+  --color-line-soft: #efe9de;
+  --color-sand: #efe9de;
+  --color-sand-strong: #dfd7c9;
+
+  --color-ink-900: #2b2620;
+  --color-ink-600: #6f6659;
+  --color-ink-400: #9c9184;
+  --color-ink-200: #c9c0b1;
+
+  --color-brand-600: #3b5bd4;
+  --color-brand-200: #c9d3f7;
+  --color-brand-50: #eef1fd;
+  --color-brand-25: #f8f9ff;
+
+  --color-warn-700: #7d5a1c;
+  --color-warn-600: #8a5c17;
+  --color-warn-500: #c58c2a;
+  --color-warn-100: #fbf0e2;
+  --color-warn-50: #fdf6e9;
+  --color-warn-line: #f0e2c8;
+
+  --color-ok-600: #3f7d54;
+  --color-ok-50: #eaf3ec;
+
+  --color-bad-600: #b3453c;
+  --color-bad-50: #fbeceb;
+  --color-bad-line: #f0d9d6;
 }
 
 html {
@@ -19,10 +47,6 @@ html {
 }
 
 body {
-  @apply bg-slate-50 text-ink-900 antialiased;
+  @apply bg-canvas text-ink-900 antialiased;
   font-family: var(--font-sans);
-}
-
-:lang(th) {
-  font-family: var(--font-thai);
 }

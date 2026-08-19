@@ -140,3 +140,15 @@ def test_audio_endpoint_streams_the_original(client: TestClient, sample_mp3: Pat
     resp = client.get(f"/api/meetings/{meeting_id}/audio")
     assert resp.status_code == 200
     assert len(resp.content) == sample_mp3.stat().st_size
+
+
+def test_auto_summarize_is_on_unless_the_uploader_opts_out(
+    client: TestClient, sample_mp3: Path
+) -> None:
+    """The default is the hands-off flow; the checkbox is how you get review-first."""
+    auto = _upload(client, sample_mp3).json()["meeting_id"]
+    manual = _upload(client, sample_mp3, auto_summarize="false").json()["meeting_id"]
+
+    with db.connection() as conn:
+        assert db.get_meeting(conn, auto).auto_summarize is True  # type: ignore[union-attr]
+        assert db.get_meeting(conn, manual).auto_summarize is False  # type: ignore[union-attr]

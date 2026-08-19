@@ -16,14 +16,25 @@ turned off entirely with `LLM_ENABLED=false`.
 | 1 | Upload + storage: streaming upload, ffmpeg normalization, duration probe, meetings CRUD, upload UI | done |
 | 2 | ASR: model loading, diarization, per-turn transcription, hallucination guard | done |
 | 3 | Job pipeline: SSE progress, retry, crash recovery UI | done |
-| 4 | Transcript review editor | not started |
-| 5 | Summarization (DeepSeek / Anthropic) | not started |
-| 6 | `.docx` generation with Sarabun | not started |
+| 4 | Transcript review editor | done |
+| 5 | Summarization (DeepSeek / Anthropic) | done |
+| 6 | `.docx` generation with Sarabun | done (font files fetched separately, see below) |
 | 7 | Hardening | partly (delete + disk quota + graceful shutdown exist) |
 
-A transcribe job runs end to end today: normalize → diarize → transcribe →
-`awaiting_review`. Summarization still fails with `Summarization is not built
-yet (Phase 5)` — deliberate, so a job never reports success it did not achieve.
+Both jobs run end to end today. Transcribe: normalize → diarize → transcribe →
+`awaiting_review`. Summarize: `summarizing` → `rendering` → `done`, leaving a
+`.docx` on disk. The review screen sits between them, and nothing is sent to a
+summarizer until a human presses the button on it.
+
+**Fonts are not in the repo.** `.docx` files name Sarabun either way, but they
+only *carry* it once you run:
+
+```bash
+uv run python scripts/fetch_fonts.py     # ~500 KB, OFL, from Google Fonts
+```
+
+Without it Thai renders correctly on machines that have Sarabun installed and
+falls back to a substitute font everywhere else.
 
 ## Architecture
 
@@ -149,7 +160,46 @@ audio, same model:
 
 It is a bias, not a guarantee — a term the speaker pronounces with heavy Thai
 phonology can still come back transliterated. The glossary is passed to the
-summarizer as well, and the reviewer can fix anything left over in Phase 4.
+summarizer as well, and the reviewer can fix anything left over on the review
+screen.
+
+## Summarization
+
+The transcript goes out as text and comes back as `MinutesJSON`. Nothing else
+about the meeting leaves the machine, and the audio never does.
+
+- **Under 40k characters, one call.** Longer meetings are split at *segment*
+  boundaries — never mid-segment, and never on spaces, which do not mark words
+  in Thai — with two segments of overlap so a decision spoken across a seam is
+  not lost, then reduced by a final merge call.
+- **Two chances at the schema.** The response is parsed with
+  `MinutesJSON.model_validate_json()`; on a `ValidationError` the model is asked
+  again *with its own validation error appended*, which it corrects reliably.
+  A second failure fails the job with the validator's message rather than
+  saving partial minutes.
+- **Every action item must quote the transcript.** `source_quote` is checked
+  against the transcript (whitespace-insensitive, since Thai spacing is
+  arbitrary) and items whose quote is not there are dropped, with a count
+  reported on the job. An invented quote is an invented commitment, and someone
+  being assigned work they never agreed to is the worst output this system
+  could produce.
+- **A refusal or a missing key fails immediately.** Those are `StageFailed`,
+  not retried three times, because the answer will not change in a minute and
+  the message is what the user needs.
+
+## Document generation
+
+`python-docx` sets `w:ascii` and `w:hAnsi` when you assign a font, and stops
+there. Thai is a complex script: without `w:cs` Word substitutes its own font,
+and without `w:szCs` it renders at the wrong point size. Every run in the
+document therefore goes through one `styled_run()` helper that sets all four —
+this is the check that is invisible on a developer machine with Sarabun
+installed, and obvious to everyone else.
+
+When `scripts/fetch_fonts.py` has been run, the TTFs are also embedded as
+obfuscated `.odttf` parts (ECMA-376 §17.8.1 — a fixed XOR against a GUID, which
+Word and LibreOffice both read) so the file renders on a machine with no Thai
+font at all.
 
 ### Two things pyannote 4.x will bite you with
 
@@ -202,11 +252,26 @@ GET    /api/meetings                 list, newest first
 GET    /api/meetings/:id             meeting + job stage + has_transcript/has_summary
 GET    /api/meetings/:id/audio       original file, for the review player
 GET    /api/jobs/:id/events          SSE: {job_id, stage, progress, detail, error}
+
+GET    /api/meetings/:id/transcript  {segments, speakers, edited}
+PATCH  /api/meetings/:id/transcript  {segments} -- full replace, sets edited=1
+PATCH  /api/meetings/:id/speakers    {"SPEAKER_00": "คุณสมชาย"}; blank resets to the key
+
+POST   /api/meetings/:id/summarize   -> 202 {meeting_id, job_id}
+GET    /api/meetings/:id/summary     {data: MinutesJSON, model, has_document, created_at}
+PATCH  /api/meetings/:id/summary     MinutesJSON -- saves and re-renders the .docx
+GET    /api/meetings/:id/document    streams the .docx
+
 DELETE /api/meetings/:id             rows + files
 GET    /api/health                   {api, db, worker_heartbeat, worker_alive, llm}
 ```
 
-Transcript, summary and document endpoints arrive in phases 4-6.
+The transcript is replaced whole rather than patched per row: two people
+editing one transcript is not a supported scenario, and a partial-patch
+protocol invites the silent lost update that a full replace makes impossible.
+
+`POST /summarize` returns the job already running if one is, so an impatient
+second click does not queue a duplicate LLM run.
 
 ### Live progress
 
