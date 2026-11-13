@@ -8,6 +8,14 @@ then generate a structured summary that renders to an editable `.docx`.
 Only the *text* transcript is sent to an LLM for summarization, and that can be
 turned off entirely with `LLM_ENABLED=false`.
 
+> **Version 0.1.0 — executive meetings only.** This release is built to
+> summarize executive and management meetings: the summary prompt, the
+> `MinutesJSON` schema and the `.docx` layout (executive summary, decisions,
+> action items) assume that format. It is not yet a general-purpose meeting
+> summarizer; other meeting types (stand-ups, lectures, interviews, workshops)
+> may produce poorly fitting minutes. General-purpose support is planned for a
+> later version.
+
 ## Build status
 
 | Phase | Scope | State |
@@ -320,3 +328,17 @@ Verified by hand on Phase 2: a 41 s Thai clip of two alternating speakers
 produces 6 segments with **6/6 correct speaker attribution**, Thai transcribed
 correctly, code-switching preserved when the terms are in the glossary, at
 0.94-1.00 mean confidence.
+
+## License
+
+Sarai AI is released under the [MIT License](LICENSE).
+
+Third-party components keep their own licenses and are not part of this repo:
+
+- **Model weights** are downloaded at runtime from HuggingFace, each under its
+  own license. The pyannote diarization and segmentation models are gated:
+  you must accept their terms with your own HuggingFace account (see
+  [Requirements](#requirements)). Check the model cards for
+  `typhoon-ai/typhoon-whisper-*` before commercial use.
+- **Sarabun font** is fetched by `scripts/fetch_fonts.py` and is licensed under
+  the SIL Open Font License (OFL).
