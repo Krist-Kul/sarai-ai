@@ -31,6 +31,7 @@ MAX_REPEATS = 3
 
 _model: Any | None = None
 _processor: Any | None = None
+_backend: str | None = None
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,40 @@ def looks_hallucinated(text: str, duration: float) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def detect_backend() -> str:
+    """Which implementation runs the weights: 'transformers' or 'mlx'.
+
+    The rule is the hardware, not the OS: mps is only ever resolved on Apple
+    Silicon without CUDA, which is exactly the machine MLX exists for. Pinning
+    ASR_DEVICE to cuda or cpu therefore keeps transformers by construction, and
+    ASR_BACKEND overrides the lot.
+    """
+    from sarai.worker import asr_mlx
+
+    configured = get_settings().asr_backend
+    if configured != "auto":
+        return configured
+    if resolve_device() != "mps":
+        return "transformers"
+    if not asr_mlx.available():
+        log.warning(
+            "Apple Silicon detected but mlx_whisper is not installed; falling back to "
+            "transformers on mps, which is several times slower. Install it with "
+            "`uv sync --group worker` on this machine."
+        )
+        return "transformers"
+    return "mlx"
+
+
+def resolve_backend() -> str:
+    """detect_backend(), decided once. It is asked per turn, and the answer
+    cannot change while the worker is up."""
+    global _backend
+    if _backend is None:
+        _backend = detect_backend()
+    return _backend
+
+
 def _dtype(device: str) -> Any:
     import torch
 
@@ -145,6 +180,18 @@ def load_model() -> tuple[Any, Any, str]:
     return model, processor, device
 
 
+def preload() -> str:
+    """Warm whichever backend will serve, and return a label for the log."""
+    settings = get_settings()
+    if resolve_backend() == "mlx":
+        from sarai.worker import asr_mlx
+
+        asr_mlx.warm()
+        return f"mlx {settings.asr_model_mlx}"
+    _, _, device = load_model()
+    return f"transformers {settings.asr_model} on {device}"
+
+
 def language_for(hint: LanguageHint) -> str | None:
     """None lets Whisper detect per turn, which is what a code-switched meeting
     needs; an explicit hint pins every turn to one language."""
@@ -174,6 +221,17 @@ def build_prompt(glossary: list[str], speaker_names: list[str]) -> str | None:
 
 def transcribe(samples: np.ndarray, hint: LanguageHint, prompt: str | None = None) -> Transcription:
     """Transcribe one speaker turn of 16 kHz mono audio."""
+    if resolve_backend() == "mlx":
+        from sarai.worker import asr_mlx
+
+        text, confidence = asr_mlx.transcribe(samples, language_for(hint), prompt)
+        return Transcription(text=text, confidence=confidence)
+    return _transcribe_transformers(samples, hint, prompt)
+
+
+def _transcribe_transformers(
+    samples: np.ndarray, hint: LanguageHint, prompt: str | None = None
+) -> Transcription:
     import torch
 
     model, processor, device = load_model()

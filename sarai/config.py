@@ -11,6 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Provider = Literal["deepseek", "anthropic"]
 Device = Literal["auto", "cuda", "mps", "cpu"]
+AsrBackend = Literal["auto", "transformers", "mlx"]
 
 ALLOWED_UPLOAD_EXTENSIONS: frozenset[str] = frozenset(
     {".mp3", ".m4a", ".wav", ".ogg", ".flac", ".mp4"}
@@ -46,10 +47,20 @@ class Settings(BaseSettings):
     # --- asr ---
     asr_model: str = "typhoon-ai/typhoon-whisper-turbo"
     asr_device: Device = "auto"
+    # Apple Silicon has no CUDA, and the same weights run several times faster
+    # through MLX than through transformers-on-mps. `auto` therefore switches
+    # backend with the hardware, and `asr_model_mlx` is the MLX conversion of
+    # whatever `asr_model` is -- the two must stay in step by hand.
+    asr_backend: AsrBackend = "auto"
+    asr_model_mlx: str = "chayapats/typhoon-whisper-turbo-mlx"
 
     # --- diarization ---
     hf_token: str | None = None
     diarization_model: str = "pyannote/speaker-diarization-community-1"
+    # `auto` follows the ASR device. pyannote 4 runs on mps: on an M4 it is
+    # ~8x faster than cpu with identical turns. Set cpu if a future pyannote
+    # release regresses there; a failed mps run also retries on cpu by itself.
+    diarization_device: Device = "auto"
 
     # --- llm ---
     llm_enabled: bool = True

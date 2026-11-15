@@ -31,6 +31,10 @@ worker = [
     "httpx>=0.27",
     "anthropic>=0.69",
     "pythainlp>=5.0",
+    # Apple Silicon only: mlx ships no wheels for anything else, and a CUDA
+    # box has no use for it. The ASR backend falls back to transformers
+    # wherever this is absent.
+    "mlx-whisper>=0.4; sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
 dev = [
     "pytest>=8.2",
@@ -70,7 +74,7 @@ files = ["sarai", "scripts", "tests"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["pyannote.*", "transformers.*", "torch.*", "torchaudio.*", "pythainlp.*", "soundfile.*", "docx.*", "lxml.*", "anthropic.*"]
+module = ["pyannote.*", "transformers.*", "torch.*", "torchaudio.*", "pythainlp.*", "soundfile.*", "docx.*", "lxml.*", "anthropic.*", "mlx.*", "mlx_whisper.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

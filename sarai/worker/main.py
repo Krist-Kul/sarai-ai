@@ -112,9 +112,9 @@ def preload_models() -> None:
     from sarai.worker import asr, diarize
 
     started = time.monotonic()
-    _, _, device = asr.load_model()
+    label = asr.preload()
     diarize.load_pipeline()
-    log.info("models loaded in %.1fs (device=%s)", time.monotonic() - started, device)
+    log.info("models loaded in %.1fs (asr=%s)", time.monotonic() - started, label)
 
 
 def run_job(conn: sqlite3.Connection, job: Job) -> None:
@@ -171,10 +171,13 @@ def main() -> int:
         if released:
             log.info("released %d stale claim(s) from a previous run", released)
         preload_models()
+        from sarai.worker import asr
+
         log.info(
-            "worker %s ready (asr=%s device=%s diarization=%s llm=%s)",
+            "worker %s ready (asr=%s backend=%s device=%s diarization=%s llm=%s)",
             wid,
             settings.asr_model,
+            asr.resolve_backend(),
             settings.asr_device,
             "on" if settings.diarization_enabled else "off (no HF_TOKEN)",
             settings.llm_provider if settings.llm_enabled else "disabled",

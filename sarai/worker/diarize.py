@@ -68,6 +68,11 @@ def resolve_device() -> str:
     return "cpu"
 
 
+def diarization_device() -> str:
+    configured = get_settings().diarization_device
+    return resolve_device() if configured == "auto" else configured
+
+
 def load_pipeline() -> Any | None:
     """Load pyannote once into a module global.
 
@@ -100,12 +105,31 @@ def load_pipeline() -> Any | None:
             "pyannote returned no pipeline for %s.\n%s", settings.diarization_model, GATE_HELP
         )
         return None
-    device = resolve_device()
-    # pyannote's own ops are not all implemented on MPS; CPU is correct there.
-    pipeline.to(torch.device("cpu" if device == "mps" else device))
+    device = diarization_device()
+    pipeline.to(torch.device(device))
     _pipeline = pipeline
-    log.info("diarization model ready on %s", "cpu" if device == "mps" else device)
+    log.info("diarization model ready on %s", device)
     return _pipeline
+
+
+def _run_pipeline(pipeline: Any, audio: Any) -> Any:
+    """Run on the configured device; if that is mps and it fails, finish on cpu.
+
+    pyannote 4 runs cleanly on mps today, but an op missing from some future
+    torch/pyannote pair would otherwise fail every job on this machine. Moving
+    to cpu is permanent for the worker's life: a device that failed once will
+    fail again, and the retry costs a whole pass each time.
+    """
+    try:
+        return pipeline(audio)
+    except (RuntimeError, NotImplementedError) as exc:
+        if getattr(getattr(pipeline, "device", None), "type", None) != "mps":
+            raise
+        import torch
+
+        log.warning("diarization failed on mps (%s); moving to cpu and retrying", exc)
+        pipeline.to(torch.device("cpu"))
+        return pipeline(audio)
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +277,7 @@ def diarize(wav: Path, samples: np.ndarray | None, sample_rate: int) -> list[Tur
         )
         return shape_turns([Turn(0.0, duration, "SPEAKER_00")], samples, sample_rate)
 
-    annotation = to_annotation(pipeline(pipeline_input(wav, samples, sample_rate)))
+    annotation = to_annotation(_run_pipeline(pipeline, pipeline_input(wav, samples, sample_rate)))
     raw = [
         Turn(float(segment.start), float(segment.end), str(speaker))
         for segment, _, speaker in annotation.itertracks(yield_label=True)

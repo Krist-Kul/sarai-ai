@@ -84,7 +84,8 @@ web (React/TS, :5173) ──HTTP/JSON──> api (FastAPI, :8000) ──> SQLite
 - `ffmpeg` and `ffprobe` on `PATH`
 - For Phase 2 onward: a GPU. ~6 GB VRAM for `typhoon-whisper-turbo`, ~12 GB for
   `typhoon-whisper-large-v3`. `ASR_DEVICE=auto` picks cuda, then mps, then cpu;
-  CPU works but runs at roughly real time or slower.
+  CPU works but runs at roughly real time or slower. On Apple Silicon the worker
+  switches to MLX on its own — see below.
 - A HuggingFace token for diarization, and **two licenses accepted with that
   same account** — the pipeline pulls a separate segmentation model, and the two
   repos are gated independently:
@@ -141,6 +142,31 @@ The worker loads Typhoon Whisper and pyannote once at startup, never per job.
 Measured cold start on an M-series Mac (`ASR_DEVICE=auto` → mps): **~50 s on the
 first run** including the model download, **~15 s** warm from the HF cache. A
 CUDA box with the weights cached is faster; a cold CPU-only box is slower.
+
+### Two backends, chosen by the hardware
+
+Same weights, two runtimes. `ASR_BACKEND=auto` picks between them at startup:
+
+| machine | backend | model |
+|---------|---------|-------|
+| CUDA GPU | transformers | `ASR_MODEL` |
+| Apple Silicon, no CUDA | MLX | `ASR_MODEL_MLX` |
+| anything else (CPU) | transformers | `ASR_MODEL` |
+
+The trigger is the resolved torch device, not the OS: `mps` is only ever
+resolved on Apple Silicon without CUDA, which is exactly the machine MLX exists
+for. Pinning `ASR_DEVICE` to `cuda` or `cpu` therefore keeps transformers by
+construction, and `ASR_BACKEND=transformers|mlx` overrides the lot.
+
+MLX is worth the second code path: transformers-on-mps falls back to CPU for
+several Whisper ops, MLX does not. Measured on an M-series Mac against a real
+Thai recording, `chayapats/typhoon-whisper-turbo-mlx` transcribed a 15 s turn in
+**2.9 s** — roughly 5× real time — at 0.96 mean confidence.
+
+`mlx-whisper` installs only on Apple Silicon (the dependency carries a
+`sys_platform == 'darwin' and platform_machine == 'arm64'` marker). Where it is
+absent the worker logs a warning once and falls back to transformers on mps, so
+a Mac without it still transcribes — just slowly.
 
 Stage order, and why:
 
@@ -241,6 +267,8 @@ with comments. The ones that matter most:
 | `DATA_DIR` | `./data` | uploads, normalized wavs, docs and the SQLite file |
 | `ASR_MODEL` | `typhoon-ai/typhoon-whisper-turbo` | set to `typhoon-ai/typhoon-whisper-large-v3` for accuracy over speed |
 | `ASR_DEVICE` | `auto` | `auto` \| `cuda` \| `mps` \| `cpu` |
+| `ASR_BACKEND` | `auto` | `auto` \| `transformers` \| `mlx`; `auto` means MLX on Apple Silicon |
+| `ASR_MODEL_MLX` | `chayapats/typhoon-whisper-turbo-mlx` | the MLX conversion of `ASR_MODEL`; keep the two in step |
 | `HF_TOKEN` | unset | required for diarization |
 | `LLM_ENABLED` | `true` | `false` disables third-party summarization entirely |
 | `LLM_PROVIDER` | `deepseek` | `deepseek` \| `anthropic` |
