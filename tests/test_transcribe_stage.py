@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from sarai import db, storage
+from sarai.config import get_settings
 from sarai.models import Job, JobKind, LanguageHint, Meeting, Segment, Stage
 from sarai.worker import asr, diarize, stages
 from sarai.worker.diarize import Turn

@@ -26,6 +26,7 @@ export function NewMeetingPage() {
   const [meetingDate, setMeetingDate] = useState("");
   const [languageHint, setLanguageHint] = useState<LanguageHint>("auto");
   const [meetingType, setMeetingType] = useState<MeetingType>("general");
+  const [autoSummarize, setAutoSummarize] = useState(true);
   const [attendees, setAttendees] = useState<Attendee[]>([{ name: "", role: null }]);
   const [glossary, setGlossary] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
@@ -40,6 +41,7 @@ export function NewMeetingPage() {
         meetingDate: meetingDate || undefined,
         languageHint,
         meetingType,
+        autoSummarize,
         attendees: attendees.filter((a) => a.name.trim() !== ""),
         glossary,
         onProgress: setProgress,
@@ -148,6 +150,18 @@ export function NewMeetingPage() {
             ))}
           </select>
         </div>
+        <label className="mt-3.5 flex items-start gap-2.5 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 accent-brand-600"
+            checked={autoSummarize}
+            onChange={(e) => setAutoSummarize(e.target.checked)}
+          />
+          <span>
+            <span className="font-semibold">{t("autoSummarize")}</span>
+            <span className="block text-xs text-ink-400">{t("autoSummarizeHelp")}</span>
+          </span>
+        </label>
       </div>
 
       <div className={card}>

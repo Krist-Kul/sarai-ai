@@ -43,6 +43,12 @@ dev = [
     "mypy>=1.10",
     "httpx>=0.27",
     "types-aiofiles>=23.2",
+    # The worker's pure helpers (turn shaping, hallucination guard, stages with
+    # models stubbed) are tested in CI without torch. These are what they import.
+    "numpy>=1.26",
+    "soundfile>=0.12",
+    "anthropic>=0.69",
+    "pythainlp>=5.0",
 ]
 
 [build-system]

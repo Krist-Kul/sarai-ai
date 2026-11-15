@@ -16,7 +16,7 @@ import numpy as np
 
 from sarai import audio, db, storage
 from sarai.config import get_settings
-from sarai.models import Job, Segment, Stage
+from sarai.models import Job, JobKind, Segment, Stage
 
 log = logging.getLogger("sarai.worker.stages")
 
@@ -249,6 +249,32 @@ def summarize(conn: sqlite3.Connection, job: Job) -> None:
     _progress(conn, job, Stage.RENDERING, 0.95, detail)
 
 
+def chain_summarize(conn: sqlite3.Connection, job: Job) -> str | None:
+    """Queue the minutes for a meeting uploaded with auto_summarize. Returns the
+    new job id, or None when nothing was queued.
+
+    Called after the transcribe job is already at awaiting_review, so the new
+    job is the meeting's latest: the meeting page, which follows the latest
+    job, moves straight on to watching it. Skipped when the LLM is disabled --
+    a job that can only fail is worse than parking at review.
+    """
+    import uuid
+
+    meeting = db.get_meeting(conn, job.meeting_id)
+    if meeting is None or not meeting.auto_summarize or not get_settings().llm_enabled:
+        return None
+    active = conn.execute(
+        "SELECT 1 FROM jobs WHERE meeting_id = ? AND kind = ? AND stage NOT IN (?, ?)",
+        (meeting.id, JobKind.SUMMARIZE.value, Stage.DONE.value, Stage.FAILED.value),
+    ).fetchone()
+    if active is not None:
+        return None
+    job_id = uuid.uuid4().hex
+    db.create_job(conn, job_id, meeting.id, JobKind.SUMMARIZE)
+    log.info("job=%s auto-summarize queued job=%s", job.id, job_id)
+    return job_id
+
+
 def run_transcribe_job(conn: sqlite3.Connection, job: Job) -> None:
     wav = normalize(conn, job)
     segments = diarize_and_transcribe(conn, job, wav)
@@ -262,6 +288,7 @@ def run_transcribe_job(conn: sqlite3.Connection, job: Job) -> None:
         active_only=True,
     ):
         raise JobCancelled(job.id)
+    chain_summarize(conn, job)
 
 
 def run_summarize_job(conn: sqlite3.Connection, job: Job) -> None:

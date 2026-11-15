@@ -38,6 +38,14 @@ export const strings = {
   language: { th: "ภาษา", en: "Language" },
   langAuto: { th: "อัตโนมัติ", en: "Auto" },
   meetingType: { th: "ประเภทการประชุม", en: "Meeting type" },
+  autoSummarize: {
+    th: "สร้างรายงานการประชุมทันทีหลังถอดเสียงเสร็จ",
+    en: "Generate minutes as soon as transcription finishes",
+  },
+  autoSummarizeHelp: {
+    th: "ปิดไว้ถ้าต้องการตรวจทานบทถอดเสียงและชื่อผู้พูดก่อน",
+    en: "Turn off to review the transcript and speaker names first",
+  },
   meetingTypeHelp: {
     th: "กำหนดรูปแบบของสรุปและหัวข้อในเอกสาร",
     en: "Shapes the summary and the document's sections",

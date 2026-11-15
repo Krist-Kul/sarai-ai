@@ -167,7 +167,7 @@ def load_model() -> tuple[Any, Any, str]:
     from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
     log.info("loading ASR model %s on %s", settings.asr_model, device)
-    processor = AutoProcessor.from_pretrained(settings.asr_model)  # type: ignore[no-untyped-call]
+    processor = AutoProcessor.from_pretrained(settings.asr_model)  # type: ignore[no-untyped-call,unused-ignore]
     model = AutoModelForSpeechSeq2Seq.from_pretrained(
         settings.asr_model,
         dtype=_dtype(device),

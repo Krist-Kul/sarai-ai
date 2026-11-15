@@ -101,6 +101,7 @@ export const api = {
     meetingDate?: string;
     languageHint: LanguageHint;
     meetingType: MeetingType;
+    autoSummarize: boolean;
     attendees: Attendee[];
     glossary: string[];
     onProgress?: (fraction: number) => void;
@@ -111,6 +112,7 @@ export const api = {
     if (input.meetingDate) form.append("meeting_date", input.meetingDate);
     form.append("language_hint", input.languageHint);
     form.append("meeting_type", input.meetingType);
+    form.append("auto_summarize", String(input.autoSummarize));
     for (const a of input.attendees) form.append("attendees", JSON.stringify(a));
     for (const g of input.glossary) form.append("glossary", g);
 

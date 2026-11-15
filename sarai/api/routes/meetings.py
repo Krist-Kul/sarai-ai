@@ -78,6 +78,7 @@ async def create_meeting(
     meeting_date: str | None = Form(None),
     language_hint: LanguageHint = Form(LanguageHint.AUTO),
     meeting_type: MeetingType = Form(MeetingType.GENERAL),
+    auto_summarize: bool = Form(True),
     attendees: list[str] = Form(default=[]),
     glossary: list[str] = Form(default=[]),
 ) -> MeetingCreated:
@@ -139,6 +140,7 @@ async def create_meeting(
         duration_sec=info.duration_sec,
         language_hint=language_hint,
         meeting_type=meeting_type,
+        auto_summarize=auto_summarize,
         glossary=parsed_glossary,
         attendees=parsed_attendees,
         created_at=db.utcnow(),

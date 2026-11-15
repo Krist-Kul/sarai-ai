@@ -87,6 +87,10 @@ class Meeting(BaseModel):
     meeting_type: MeetingType = MeetingType.GENERAL
     glossary: list[str] = Field(default_factory=list)
     attendees: list[Attendee] = Field(default_factory=list)
+    # Queue the minutes as soon as transcription finishes. The upload form
+    # defaults it on; the model defaults it off so that code creating meetings
+    # directly gets the review-first flow unless it asks otherwise.
+    auto_summarize: bool = False
     created_at: str
 
 
