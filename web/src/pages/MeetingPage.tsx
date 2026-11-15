@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
-import { useCallback, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "../lib/api";
 import { formatDateTime, formatDuration, useI18n } from "../lib/i18n";
@@ -9,6 +9,9 @@ import { useElapsed, useJobEvents } from "../lib/useJobEvents";
 import { StageBadge } from "../components/StageBadge";
 import { StageTimeline } from "../components/StageTimeline";
 import type { Stage } from "../types";
+
+// Must match sarai.models.CANCELLED_ERROR.
+const CANCELLED_ERROR = "Cancelled by user";
 
 const LIVE_STAGES = new Set<Stage>([
   "queued",
@@ -54,6 +57,21 @@ export function MeetingPage() {
   const error = event?.error ?? meeting.data?.error ?? null;
 
   const running = stage != null && LIVE_STAGES.has(stage);
+  const cancelled = stage === "failed" && error === CANCELLED_ERROR;
+
+  // Two clicks to stop: an hour of transcription is too much to lose to a slip.
+  const [confirmStop, setConfirmStop] = useState(false);
+  useEffect(() => {
+    if (!running) setConfirmStop(false);
+  }, [running]);
+  const stop = useMutation({
+    mutationFn: (job: string) => api.cancelJob(job),
+    onSettled: () => {
+      setConfirmStop(false);
+      void queryClient.invalidateQueries({ queryKey: ["meeting", id] });
+      void queryClient.invalidateQueries({ queryKey: ["meetings"] });
+    },
+  });
   const elapsed = useElapsed(meeting.data?.meeting.created_at, running);
   streamLost.current = running && status === "lost";
 
@@ -114,11 +132,47 @@ export function MeetingPage() {
             {running && status === "lost" && <span className="text-warn-600">{t("liveLost")}</span>}
             {stage === "queued" && <span>{t("queuedNote")}</span>}
             {stage === "awaiting_review" && <span>{t("readyNote")}</span>}
-            {stage === "failed" && <span className="text-bad-600">{t("failedNote")}</span>}
-            {running && <span className="ml-auto text-ink-400">{t("cancelJobHint")}</span>}
+            {stage === "failed" && (
+              <span className="text-bad-600">{t(cancelled ? "cancelledNote" : "failedNote")}</span>
+            )}
+            {running && jobId && (
+              <span className="ml-auto flex items-center gap-2">
+                {confirmStop && !stop.isPending && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmStop(false)}
+                    className="rounded-full border border-line bg-surface px-3 py-1 text-[12.5px] font-semibold text-ink-900 hover:border-ink-200"
+                  >
+                    {t("stopJobCancel")}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={stop.isPending}
+                  onClick={() => (confirmStop ? stop.mutate(jobId) : setConfirmStop(true))}
+                  className={`rounded-full px-3 py-1 text-[12.5px] font-semibold disabled:opacity-60 ${
+                    confirmStop
+                      ? "bg-bad-600 text-white hover:bg-bad-600/90"
+                      : "border border-bad-line bg-surface text-bad-600 hover:bg-bad-50"
+                  }`}
+                >
+                  {stop.isPending
+                    ? t("stoppingJob")
+                    : confirmStop
+                      ? t("stopJobConfirm")
+                      : t("stopJob")}
+                </button>
+              </span>
+            )}
           </div>
 
-          {error && (
+          {stop.error && (
+            <p className="mt-3 rounded-xl border border-bad-line bg-bad-50 p-3 text-sm text-bad-600">
+              {stop.error instanceof ApiError ? stop.error.message : String(stop.error)}
+            </p>
+          )}
+
+          {error && !cancelled && (
             <p className="mt-3 rounded-xl border border-bad-line bg-bad-50 p-3 text-sm text-bad-600">
               {error}
             </p>

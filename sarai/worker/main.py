@@ -23,7 +23,7 @@ from sarai import db
 from sarai.config import get_settings
 from sarai.models import Job, JobKind, Stage
 from sarai.worker import stages
-from sarai.worker.stages import StageFailed, StageNotImplemented
+from sarai.worker.stages import JobCancelled, StageFailed, StageNotImplemented
 
 log = logging.getLogger("sarai.worker")
 
@@ -141,7 +141,10 @@ def handle_failure(conn: sqlite3.Connection, job: Job, exc: Exception, max_attem
         time.sleep(min(30.0, 2.0 * job.attempts))
     else:
         log.error("job=%s failed permanently: %s", job.id, message)
-        db.update_job(conn, job.id, stage=Stage.FAILED, error=message, release=True)
+        # active_only: a job cancelled mid-run keeps its "cancelled" message.
+        db.update_job(
+            conn, job.id, stage=Stage.FAILED, error=message, release=True, active_only=True
+        )
 
 
 def main() -> int:
@@ -190,6 +193,9 @@ def main() -> int:
                 continue
             try:
                 run_job(conn, job)
+            except JobCancelled:
+                # cancel_job already wrote the final state and released the claim.
+                log.info("job=%s cancelled by user; abandoned", job.id)
             except Exception as exc:  # noqa: BLE001 - the loop must survive any job
                 handle_failure(conn, job, exc, settings.worker_max_attempts)
 

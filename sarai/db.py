@@ -20,6 +20,8 @@ from typing import Any
 
 from sarai.config import get_settings
 from sarai.models import (
+    CANCELLED_ERROR,
+    TERMINAL_STAGES,
     Attendee,
     Job,
     JobKind,
@@ -379,7 +381,14 @@ def update_job(
     detail: str | None = None,
     error: str | None = None,
     release: bool = False,
-) -> None:
+    active_only: bool = False,
+) -> bool:
+    """Write job fields. Returns False if no row changed.
+
+    `active_only` skips the write when the job is already terminal. The worker
+    passes it for every write, so a job the user cancelled mid-run stays
+    cancelled instead of being overwritten by the next progress tick.
+    """
     sets: list[str] = ["updated_at = ?"]
     args: list[Any] = [utcnow()]
     if stage is not None:
@@ -398,15 +407,50 @@ def update_job(
         sets.append("claimed_by = NULL")
         sets.append("claimed_at = NULL")
     args.append(job_id)
-    conn.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE id = ?", args)
+    where = "id = ?"
+    if active_only:
+        where += " AND stage NOT IN (?, ?, ?)"
+        args.extend(s.value for s in (Stage.DONE, Stage.FAILED, Stage.AWAITING_REVIEW))
+    cur = conn.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE {where}", args)
+    return cur.rowcount > 0
+
+
+def cancel_job(conn: sqlite3.Connection, job_id: str) -> bool:
+    """Stop a queued or running job. Returns False if it was already terminal.
+
+    A queued job is never claimed after this. A running one is noticed by the
+    worker at its next progress write or cancellation check, which abandons the
+    job without touching the row again.
+    """
+    cur = conn.execute(
+        """UPDATE jobs SET stage = ?, error = ?, detail = ?,
+                           claimed_by = NULL, claimed_at = NULL, updated_at = ?
+           WHERE id = ? AND stage NOT IN (?, ?, ?)""",
+        (
+            Stage.FAILED.value,
+            CANCELLED_ERROR,
+            "cancelled",
+            utcnow(),
+            job_id,
+            Stage.DONE.value,
+            Stage.FAILED.value,
+            Stage.AWAITING_REVIEW.value,
+        ),
+    )
+    return cur.rowcount > 0
+
+
+def is_job_active(conn: sqlite3.Connection, job_id: str) -> bool:
+    row = conn.execute("SELECT stage FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    return row is not None and Stage(row["stage"]) not in TERMINAL_STAGES
 
 
 def requeue_job(conn: sqlite3.Connection, job_id: str, detail: str) -> None:
     conn.execute(
         """UPDATE jobs SET stage = ?, claimed_by = NULL, claimed_at = NULL,
                            detail = ?, updated_at = ?
-           WHERE id = ?""",
-        (Stage.QUEUED.value, detail, utcnow(), job_id),
+           WHERE id = ? AND stage NOT IN (?, ?)""",
+        (Stage.QUEUED.value, detail, utcnow(), job_id, Stage.DONE.value, Stage.FAILED.value),
     )
 
 

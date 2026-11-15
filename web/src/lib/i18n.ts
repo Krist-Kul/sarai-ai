@@ -160,9 +160,13 @@ export const strings = {
 
   currentStep: { th: "ขั้นตอนตอนนี้", en: "Current step" },
   nextUp: { th: "ขั้นต่อไป", en: "Next up" },
-  cancelJobHint: {
-    th: "หยุดงานได้ด้วยการลบการประชุมนี้",
-    en: "To stop this job, delete the meeting.",
+  stopJob: { th: "หยุดงาน", en: "Stop job" },
+  stopJobConfirm: { th: "ยืนยันหยุดงาน", en: "Confirm stop" },
+  stopJobCancel: { th: "ไม่หยุด", en: "Keep running" },
+  stoppingJob: { th: "กำลังหยุด…", en: "Stopping…" },
+  cancelledNote: {
+    th: "งานนี้ถูกหยุดโดยผู้ใช้",
+    en: "This job was stopped by a user.",
   },
   listen: { th: "ฟังไฟล์เสียง", en: "Listen to the recording" },
   reviewReady: {

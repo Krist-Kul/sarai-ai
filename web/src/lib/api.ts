@@ -5,6 +5,7 @@
 import type {
   Attendee,
   HealthResponse,
+  JobEvent,
   LanguageHint,
   MeetingCreated,
   MeetingDetail,
@@ -57,6 +58,8 @@ export const api = {
   deleteMeeting: (id: string) =>
     request<void>(`/api/meetings/${id}`, { method: "DELETE" }),
   audioUrl: (id: string) => `/api/meetings/${id}/audio`,
+  cancelJob: (jobId: string) =>
+    request<JobEvent>(`/api/jobs/${jobId}/cancel`, { method: "POST" }),
 
   // --- review ---
   getTranscript: (id: string) => request<TranscriptResponse>(`/api/meetings/${id}/transcript`),

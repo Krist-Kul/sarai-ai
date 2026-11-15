@@ -97,6 +97,29 @@ async def stream_job(
         await asyncio.sleep(POLL_SECONDS)
 
 
+def _cancel(job_id: str) -> tuple[bool, Job | None]:
+    with db.connection() as conn:
+        cancelled = db.cancel_job(conn, job_id)
+        return cancelled, db.get_job(conn, job_id)
+
+
+@router.post("/{job_id}/cancel", response_model=JobEvent)
+async def cancel_job(job_id: str) -> JobEvent:
+    """Stop a queued or running job.
+
+    Queued jobs stop immediately. A running job is marked cancelled at once and
+    the worker abandons it at its next check -- within one transcribed turn, or
+    after the current diarization pass or LLM request, which cannot be
+    interrupted mid-call.
+    """
+    cancelled, job = await to_thread.run_sync(_cancel, job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if not cancelled:
+        raise HTTPException(409, f"Job {job_id} has already finished ({job.stage.value})")
+    return _event_of(job)
+
+
 @router.get("/{job_id}/events")
 async def job_events(job_id: str, request: Request) -> StreamingResponse:
     """Stage, progress and detail for one job until it reaches a terminal stage."""

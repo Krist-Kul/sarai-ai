@@ -38,8 +38,19 @@ class StageFailed(RuntimeError):
     delays the message the user needs to read."""
 
 
+class JobCancelled(Exception):  # noqa: N818 - reads as an event, not an error
+    """The user stopped this job from the web UI. Not a failure: the row already
+    says so, and the worker must not write to it again."""
+
+
+def check_cancelled(conn: sqlite3.Connection, job: Job) -> None:
+    if not db.is_job_active(conn, job.id):
+        raise JobCancelled(job.id)
+
+
 def _progress(conn: sqlite3.Connection, job: Job, stage: Stage, pct: float, detail: str) -> None:
-    db.update_job(conn, job.id, stage=stage, progress=pct, detail=detail)
+    if not db.update_job(conn, job.id, stage=stage, progress=pct, detail=detail, active_only=True):
+        raise JobCancelled(job.id)
     log.info("job=%s stage=%s progress=%.2f %s", job.id, stage.value, pct, detail)
 
 
@@ -111,6 +122,9 @@ def diarize_and_transcribe(conn: sqlite3.Connection, job: Job, wav: Path) -> lis
     _progress(conn, job, Stage.TRANSCRIBING, DIARIZE_DONE, f"0/{total} turns")
 
     for index, turn in enumerate(turns, start=1):
+        # One indexed SELECT per turn against seconds of ASR: cheap, and it makes
+        # the stop button take effect within one turn instead of ten.
+        check_cancelled(conn, job)
         lo = max(0, int(turn.start * sample_rate))
         hi = min(len(samples), int(turn.end * sample_rate))
         clip = samples[lo:hi]
@@ -221,6 +235,8 @@ def summarize(conn: sqlite3.Connection, job: Job) -> None:
     if dropped:
         log.warning("job=%s dropped %d action item(s) with unverifiable quotes", job.id, dropped)
 
+    # The LLM call can outlast a cancel; do not overwrite saved minutes for a
+    # job the user already stopped.
     _progress(conn, job, Stage.RENDERING, 0.85, "rendering the .docx")
     path = docgen.render(
         minutes, storage.docx_path(meeting.id), model=model, meeting_type=meeting.meeting_type
@@ -236,16 +252,21 @@ def summarize(conn: sqlite3.Connection, job: Job) -> None:
 def run_transcribe_job(conn: sqlite3.Connection, job: Job) -> None:
     wav = normalize(conn, job)
     segments = diarize_and_transcribe(conn, job, wav)
-    db.update_job(
+    if not db.update_job(
         conn,
         job.id,
         stage=Stage.AWAITING_REVIEW,
         progress=1.0,
         detail=f"{len(segments)} segments ready for review",
         release=True,
-    )
+        active_only=True,
+    ):
+        raise JobCancelled(job.id)
 
 
 def run_summarize_job(conn: sqlite3.Connection, job: Job) -> None:
     summarize(conn, job)
-    db.update_job(conn, job.id, stage=Stage.DONE, progress=1.0, detail="done", release=True)
+    if not db.update_job(
+        conn, job.id, stage=Stage.DONE, progress=1.0, detail="done", release=True, active_only=True
+    ):
+        raise JobCancelled(job.id)

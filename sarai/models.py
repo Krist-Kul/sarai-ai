@@ -52,6 +52,11 @@ class Stage(StrEnum):
 
 TERMINAL_STAGES: frozenset[Stage] = frozenset({Stage.AWAITING_REVIEW, Stage.DONE, Stage.FAILED})
 
+# Error text on a job the user stopped from the web UI. A cancelled job is a
+# failed job with this message: the worker, the SSE stream and the UI already
+# treat `failed` as final, so cancellation needs no new stage.
+CANCELLED_ERROR = "Cancelled by user"
+
 # ---------------------------------------------------------------------------
 # Core domain
 # ---------------------------------------------------------------------------
