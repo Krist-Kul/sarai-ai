@@ -13,3 +13,12 @@ node_modules/
 web/dist/
 web/tsconfig.tsbuildinfo
 .DS_Store
+
+# Meeting media never goes into git, wherever it lands. Examples ship generated
+# minutes only -- see examples/*/README.md.
+*.mp3
+*.mp4
+*.m4a
+*.wav
+*.ogg
+*.flac

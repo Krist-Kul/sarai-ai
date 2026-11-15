@@ -44,6 +44,13 @@ uv run python scripts/fetch_fonts.py     # ~500 KB, OFL, from Google Fonts
 Without it Thai renders correctly on machines that have Sarabun installed and
 falls back to a substitute font everywhere else.
 
+## Example output
+
+[`examples/parliament-question-time`](examples/parliament-question-time/) holds
+minutes generated from a recorded Thai House of Representatives session, as
+`.docx` and Markdown. It is unedited machine output with known errors; read the
+disclaimer there before using it.
+
 ## Architecture
 
 Two processes, one Python codebase, one set of Pydantic models.
