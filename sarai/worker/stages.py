@@ -191,6 +191,7 @@ def summarize(conn: sqlite3.Connection, job: Job) -> None:
     inp = SummarizeInput(
         title=meeting.title,
         meeting_date=meeting.meeting_date,
+        meeting_type=meeting.meeting_type,
         attendees=meeting.attendees,
         glossary=meeting.glossary,
         segments=transcript.segments,
@@ -221,7 +222,9 @@ def summarize(conn: sqlite3.Connection, job: Job) -> None:
         log.warning("job=%s dropped %d action item(s) with unverifiable quotes", job.id, dropped)
 
     _progress(conn, job, Stage.RENDERING, 0.85, "rendering the .docx")
-    path = docgen.render(minutes, storage.docx_path(meeting.id), model=model)
+    path = docgen.render(
+        minutes, storage.docx_path(meeting.id), model=model, meeting_type=meeting.meeting_type
+    )
     db.save_summary(conn, meeting.id, minutes, model, str(path))
 
     detail = f"{len(minutes.action_items)} action item(s)"

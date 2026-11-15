@@ -5,6 +5,8 @@ export type JobKind = "transcribe" | "summarize";
 
 export type LanguageHint = "auto" | "th" | "en";
 
+export type MeetingType = "general" | "executive" | "standup" | "lecture" | "interview" | "workshop";
+
 export type Stage = "queued" | "normalizing" | "diarizing" | "transcribing" | "awaiting_review" | "summarizing" | "rendering" | "done" | "failed";
 
 export interface ActionItem {
@@ -72,9 +74,9 @@ export interface Meeting {
   audio_path: string;
   duration_sec?: number | null;
   language_hint?: LanguageHint;
+  meeting_type?: MeetingType;
   glossary?: string[];
   attendees?: Attendee[];
-  auto_summarize?: boolean;
   created_at: string;
 }
 
@@ -121,10 +123,15 @@ export interface SpeakersUpdate {
 export interface SummarizeInput {
   title?: string | null;
   meeting_date?: string | null;
+  meeting_type?: MeetingType;
   attendees?: Attendee[];
   glossary?: string[];
   segments?: Segment[];
   speakers?: Record<string, string>;
+}
+
+export interface SummarizeRequest {
+  meeting_type?: MeetingType | null;
 }
 
 export interface SummaryResponse {
@@ -132,6 +139,7 @@ export interface SummaryResponse {
   model: string;
   has_document?: boolean;
   created_at: string;
+  meeting_type?: MeetingType;
 }
 
 export interface TranscriptResponse {

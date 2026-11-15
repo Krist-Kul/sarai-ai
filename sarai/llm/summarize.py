@@ -103,14 +103,13 @@ async def summarize(
         raise LLMError("This meeting has no transcript to summarize")
 
     client = chat if chat is not None else get_chat(settings)
+    system = prompt.system_prompt(inp.meeting_type)
     total = chunk.total_chars(inp.segments)
 
     if total <= settings.llm_single_call_chars:
         if on_progress:
             on_progress(0.3, f"summarizing {len(inp.segments)} segments")
-        minutes = await _call_validated(
-            client, prompt.SYSTEM_PROMPT, prompt.build_user_message(inp)
-        )
+        minutes = await _call_validated(client, system, prompt.build_user_message(inp))
     else:
         chunks = chunk.split_segments(
             inp.segments,
@@ -124,14 +123,12 @@ async def summarize(
                 # Reserve the last fifth of the stage for the reduce call.
                 on_progress(0.8 * index / len(chunks), f"part {index} of {len(chunks)}")
             parts.append(
-                await _call_validated(
-                    client, prompt.SYSTEM_PROMPT, prompt.build_user_message(inp, part)
-                )
+                await _call_validated(client, system, prompt.build_user_message(inp, part))
             )
         if on_progress:
             on_progress(0.85, f"merging {len(parts)} parts")
         minutes = await _call_validated(
-            client, prompt.REDUCE_PROMPT, prompt.build_reduce_message(parts)
+            client, prompt.reduce_prompt(inp.meeting_type), prompt.build_reduce_message(parts)
         )
 
     # The model is told to use the meeting's own title and date; if it invented

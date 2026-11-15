@@ -7,7 +7,8 @@ import { useI18n } from "../lib/i18n";
 import { AttendeeRows } from "../components/AttendeeRows";
 import { ChipInput } from "../components/ChipInput";
 import { Dropzone } from "../components/Dropzone";
-import type { Attendee, LanguageHint } from "../types";
+import { MEETING_TYPES } from "../lib/meetingType";
+import type { Attendee, LanguageHint, MeetingType } from "../types";
 
 const LANG_OPTIONS: { value: LanguageHint; key: "langAuto" | "langTh" | "langEn" }[] = [
   { value: "auto", key: "langAuto" },
@@ -24,6 +25,7 @@ export function NewMeetingPage() {
   const [title, setTitle] = useState("");
   const [meetingDate, setMeetingDate] = useState("");
   const [languageHint, setLanguageHint] = useState<LanguageHint>("auto");
+  const [meetingType, setMeetingType] = useState<MeetingType>("general");
   const [attendees, setAttendees] = useState<Attendee[]>([{ name: "", role: null }]);
   const [glossary, setGlossary] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
@@ -37,6 +39,7 @@ export function NewMeetingPage() {
         title: title.trim() || file.name,
         meetingDate: meetingDate || undefined,
         languageHint,
+        meetingType,
         attendees: attendees.filter((a) => a.name.trim() !== ""),
         glossary,
         onProgress: setProgress,
@@ -126,6 +129,24 @@ export function NewMeetingPage() {
               ))}
             </div>
           </fieldset>
+        </div>
+        <div className="mt-3.5">
+          <label className={label} htmlFor="meeting-type">
+            {t("meetingType")}
+          </label>
+          <span className="ml-2 text-xs text-ink-400">{t("meetingTypeHelp")}</span>
+          <select
+            id="meeting-type"
+            className={`${input} sm:max-w-xs`}
+            value={meetingType}
+            onChange={(e) => setMeetingType(e.target.value as MeetingType)}
+          >
+            {MEETING_TYPES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {t(option.key)}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

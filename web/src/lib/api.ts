@@ -9,6 +9,7 @@ import type {
   MeetingCreated,
   MeetingDetail,
   MeetingListItem,
+  MeetingType,
   MinutesJSON,
   Segment,
   SummaryResponse,
@@ -73,8 +74,15 @@ export const api = {
     }),
 
   // --- minutes ---
-  summarize: (id: string) =>
-    request<MeetingCreated>(`/api/meetings/${id}/summarize`, { method: "POST" }),
+  /** `meetingType`, when given, is saved on the meeting before the job starts. */
+  summarize: (id: string, meetingType?: MeetingType) =>
+    request<MeetingCreated>(`/api/meetings/${id}/summarize`, {
+      method: "POST",
+      ...(meetingType && {
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ meeting_type: meetingType }),
+      }),
+    }),
   getSummary: (id: string) => request<SummaryResponse>(`/api/meetings/${id}/summary`),
   saveSummary: (id: string, minutes: MinutesJSON) =>
     request<SummaryResponse>(`/api/meetings/${id}/summary`, {
@@ -89,6 +97,7 @@ export const api = {
     title: string;
     meetingDate?: string;
     languageHint: LanguageHint;
+    meetingType: MeetingType;
     attendees: Attendee[];
     glossary: string[];
     onProgress?: (fraction: number) => void;
@@ -98,6 +107,7 @@ export const api = {
     form.append("title", input.title);
     if (input.meetingDate) form.append("meeting_date", input.meetingDate);
     form.append("language_hint", input.languageHint);
+    form.append("meeting_type", input.meetingType);
     for (const a of input.attendees) form.append("attendees", JSON.stringify(a));
     for (const g of input.glossary) form.append("glossary", g);
 

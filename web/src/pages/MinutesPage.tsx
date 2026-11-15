@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "../lib/api";
 import { formatDateTime, useI18n } from "../lib/i18n";
+import { sectionLabels } from "../lib/meetingType";
 import { useDebouncedSave } from "../lib/useDebouncedSave";
 import { EditableText } from "../components/EditableText";
 import type { ActionItem, MinutesJSON } from "../types";
@@ -29,6 +30,8 @@ export function MinutesPage() {
     refetchOnWindowFocus: false,
     retry: false,
   });
+
+  const labels = sectionLabels(summary.data?.meeting_type);
 
   const [minutes, setMinutes] = useState<MinutesJSON | null>(null);
   const loaded = useRef(false);
@@ -136,9 +139,9 @@ export function MinutesPage() {
         <div className="mt-2 flex flex-col gap-0.5 text-[13.5px]">
           {(
             [
-              ["summary", t("sectionSummary"), null],
+              ["summary", t(labels.summary), null],
               ["agenda", t("sectionAgenda"), counts.agenda],
-              ["discussion", t("sectionDiscussion"), counts.discussion],
+              ["discussion", t(labels.discussion), counts.discussion],
               ["decisions", t("sectionDecisions"), counts.decisions],
               ["actions", t("sectionActions"), counts.actions],
               ["questions", t("sectionQuestions"), counts.questions],
@@ -221,13 +224,13 @@ export function MinutesPage() {
           </div>
 
           <h2 id="summary" className={SECTION}>
-            {t("sectionSummary")}
+            {t(labels.summary)}
           </h2>
           <EditableText
             value={minutes.summary ?? ""}
             onChange={(summaryText) => edit({ summary: summaryText })}
             onCommit={save.flush}
-            ariaLabel={t("sectionSummary")}
+            ariaLabel={t(labels.summary)}
             className="text-[15.5px] leading-[1.9]"
           />
 
@@ -262,7 +265,7 @@ export function MinutesPage() {
           {(minutes.discussion ?? []).length > 0 && (
             <>
               <h2 id="discussion" className={SECTION}>
-                {t("sectionDiscussion")}
+                {t(labels.discussion)}
               </h2>
               {(minutes.discussion ?? []).map((topic, index) => (
                 <div key={index} className="mb-4">
@@ -276,7 +279,7 @@ export function MinutesPage() {
                       })
                     }
                     onCommit={save.flush}
-                    ariaLabel={t("sectionDiscussion")}
+                    ariaLabel={t(labels.discussion)}
                     className="text-[15px] font-semibold"
                   />
                   {(topic.points ?? []).map((point, pointIndex) => (

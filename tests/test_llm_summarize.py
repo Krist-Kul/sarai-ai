@@ -11,10 +11,11 @@ import json
 import pytest
 
 import sarai.llm.summarize as summarize_mod
+from sarai import meeting_types
 from sarai.config import get_settings
-from sarai.llm import chunk
+from sarai.llm import chunk, prompt
 from sarai.llm.client import LLMError
-from sarai.models import MinutesJSON, Segment, SummarizeInput
+from sarai.models import MeetingType, MinutesJSON, Segment, SummarizeInput
 
 
 def seg(index: int, text: str, speaker: str = "SPEAKER_00") -> Segment:
@@ -195,3 +196,43 @@ async def test_prompt_carries_speaker_labels_and_glossary() -> None:
     assert "SPEAKER_00 = คุณสมชาย" in user
     # Segments are rendered as [HH:MM:SS] Label: text, using the label.
     assert "[00:00:00] คุณสมชาย: ขอเริ่มที่เรื่อง deploy" in user
+
+
+@pytest.mark.parametrize("meeting_type", list(MeetingType))
+def test_every_meeting_type_keeps_the_evidence_rules(meeting_type: MeetingType) -> None:
+    system = prompt.system_prompt(meeting_type)
+    profile = meeting_types.profile(meeting_type)
+
+    assert system.startswith(profile.persona)
+    assert profile.summary_guidance in system
+    assert profile.focus in system
+    # The rules that stop invented owners and quotes are not negotiable per type.
+    for rule in ("NEVER INVENT", "source_quote", "DECISIONS vs DISCUSSION", "Do NOT translate"):
+        assert rule in system
+    # Placeholders all filled, JSON schema braces untouched.
+    assert "{persona}" not in system and "{focus}" not in system
+    assert '"attendees": [{"name": string' in system
+
+
+def test_executive_prompt_is_the_original_one() -> None:
+    assert prompt.system_prompt(MeetingType.EXECUTIVE) == prompt.SYSTEM_PROMPT
+    assert "executive overview" in prompt.SYSTEM_PROMPT
+    assert "executive overview" not in prompt.system_prompt(MeetingType.LECTURE)
+
+
+async def test_meeting_type_reaches_map_and_reduce_prompts() -> None:
+    settings = get_settings().model_copy(
+        update={"llm_single_call_chars": 300, "llm_chunk_chars": 150}
+    )
+    segments = [seg(i, "ก" * 60) for i in range(8)]
+    # One response per map call plus the reduce; extras are never consumed.
+    chat = FakeChat([minutes_json()] * (len(segments) + 1))
+    inp = SummarizeInput(meeting_type=MeetingType.LECTURE, segments=segments)
+
+    await summarize_mod.summarize(inp, settings, chat=chat)
+
+    lecture = meeting_types.profile(MeetingType.LECTURE)
+    systems = [system for system, _ in chat.calls]
+    assert len(systems) > 2  # really went through map-reduce
+    assert all(lecture.summary_guidance in s for s in systems)
+    assert systems[-1] == prompt.reduce_prompt(MeetingType.LECTURE)

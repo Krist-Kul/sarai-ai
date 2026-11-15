@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sarai import db, storage
 from sarai.api.main import create_app
 from sarai.config import get_settings
-from sarai.models import JobKind, Meeting, MinutesJSON, Segment, Stage
+from sarai.models import JobKind, Meeting, MeetingType, MinutesJSON, Segment, Stage
 
 MINUTES = {
     "title": "ประชุมทีม",
@@ -59,6 +59,23 @@ def test_summarize_enqueues_a_job(client: TestClient) -> None:
     assert job is not None
     assert job.kind is JobKind.SUMMARIZE
     assert job.stage is Stage.QUEUED
+
+
+def test_summarize_saves_a_meeting_type_given_in_the_body(client: TestClient) -> None:
+    mid = _meeting()
+    resp = client.post(f"/api/meetings/{mid}/summarize", json={"meeting_type": "lecture"})
+    assert resp.status_code == 202, resp.text
+
+    with db.connection() as conn:
+        meeting = db.get_meeting(conn, mid)
+    assert meeting is not None
+    assert meeting.meeting_type is MeetingType.LECTURE
+
+
+def test_summarize_rejects_an_unknown_meeting_type(client: TestClient) -> None:
+    mid = _meeting()
+    resp = client.post(f"/api/meetings/{mid}/summarize", json={"meeting_type": "party"})
+    assert resp.status_code == 422
 
 
 def test_summarize_reuses_the_job_already_running(client: TestClient) -> None:

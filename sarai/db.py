@@ -27,6 +27,7 @@ from sarai.models import (
     Meeting,
     MeetingDetail,
     MeetingListItem,
+    MeetingType,
     MinutesJSON,
     Segment,
     Stage,
@@ -127,6 +128,7 @@ def _meeting_from_row(row: sqlite3.Row) -> Meeting:
         audio_path=row["audio_path"],
         duration_sec=row["duration_sec"],
         language_hint=LanguageHint(row["language_hint"]),
+        meeting_type=MeetingType(row["meeting_type"]),
         glossary=json.loads(row["glossary"] or "[]"),
         attendees=[Attendee.model_validate(a) for a in json.loads(row["attendees"] or "[]")],
         created_at=row["created_at"],
@@ -157,8 +159,9 @@ def _job_from_row(row: sqlite3.Row) -> Job:
 def create_meeting(conn: sqlite3.Connection, meeting: Meeting) -> Meeting:
     conn.execute(
         """INSERT INTO meetings (id, title, meeting_date, source_file, audio_path,
-                                 duration_sec, language_hint, glossary, attendees, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                 duration_sec, language_hint, meeting_type, glossary,
+                                 attendees, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             meeting.id,
             meeting.title,
@@ -167,12 +170,19 @@ def create_meeting(conn: sqlite3.Connection, meeting: Meeting) -> Meeting:
             meeting.audio_path,
             meeting.duration_sec,
             meeting.language_hint.value,
+            meeting.meeting_type.value,
             json.dumps(meeting.glossary, ensure_ascii=False),
             json.dumps([a.model_dump() for a in meeting.attendees], ensure_ascii=False),
             meeting.created_at,
         ),
     )
     return meeting
+
+
+def set_meeting_type(conn: sqlite3.Connection, meeting_id: str, meeting_type: MeetingType) -> None:
+    conn.execute(
+        "UPDATE meetings SET meeting_type = ? WHERE id = ?", (meeting_type.value, meeting_id)
+    )
 
 
 def get_meeting(conn: sqlite3.Connection, meeting_id: str) -> Meeting | None:

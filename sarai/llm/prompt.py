@@ -1,18 +1,20 @@
 """Prompts for the summarizer.
 
-The system prompt is the contract with the model. It is kept verbatim from the
-spec: every rule in it exists because the failure it prevents was observed --
-invented owners, translated Thai, action items with no evidence.
+The system prompt is the contract with the model. The rules are kept verbatim
+from the spec: every one exists because the failure it prevents was observed --
+invented owners, translated Thai, action items with no evidence. Only the
+persona, the summary guidance and a type-specific focus rule vary with the
+meeting type (see sarai/meeting_types.py); the rules never do.
 """
 
 from __future__ import annotations
 
 from sarai import thai
-from sarai.models import MinutesJSON, Segment, SummarizeInput
+from sarai.meeting_types import profile
+from sarai.models import MeetingType, MinutesJSON, Segment, SummarizeInput
 
-SYSTEM_PROMPT = """\
-You are an experienced Thai corporate secretary writing formal meeting minutes
-(รายงานการประชุม). You receive a diarized transcript of a real meeting.
+_SYSTEM_TEMPLATE = """\
+{persona} You receive a diarized transcript of a real meeting.
 
 OUTPUT: valid JSON only. No markdown fences, no preamble, no explanation.
 
@@ -21,7 +23,7 @@ Schema:
   "title": string,
   "meeting_date": string | null,
   "attendees": [{"name": string, "role": string | null}],
-  "summary": string,                 // 3-5 sentences, executive overview
+  "summary": string,                 // {summary_guidance}
   "agenda": [string],
   "discussion": [
     {"topic": string, "points": [string], "speakers": [string]}
@@ -62,9 +64,26 @@ RULES — follow these strictly:
 
 7. NUMBERS: normalize spoken numbers to digits in decisions and action items
    ("สองพันห้า" -> 2,500). A wrong figure there has consequences.
+
+8. MEETING TYPE: {focus}
+   Leave a list empty rather than pad it; rules 2-4 still apply.
 """
 
-REDUCE_PROMPT = """\
+
+def system_prompt(meeting_type: MeetingType = MeetingType.GENERAL) -> str:
+    p = profile(meeting_type)
+    # str.replace, not str.format: the template is full of JSON braces.
+    return (
+        _SYSTEM_TEMPLATE.replace("{persona}", p.persona)
+        .replace("{summary_guidance}", p.summary_guidance)
+        .replace("{focus}", p.focus)
+    )
+
+
+# The original executive-minutes prompt, kept as a name for callers and tests.
+SYSTEM_PROMPT = system_prompt(MeetingType.EXECUTIVE)
+
+_REDUCE_TEMPLATE = """\
 You are merging partial meeting minutes produced from consecutive chunks of one
 meeting transcript. They overlap slightly, so the same decision may appear more
 than once.
@@ -80,9 +99,13 @@ RULES:
 4. Merge discussion topics that cover the same subject; keep every distinct
    point.
 5. Never introduce a fact that is not in one of the parts.
-6. The summary field is rewritten as one 3-5 sentence overview of the whole
-   meeting.
+6. The summary field is rewritten as one overview of the whole meeting:
+   {summary_guidance}.
 """
+
+
+def reduce_prompt(meeting_type: MeetingType = MeetingType.GENERAL) -> str:
+    return _REDUCE_TEMPLATE.replace("{summary_guidance}", profile(meeting_type).summary_guidance)
 
 
 def format_timestamp(seconds: float) -> str:

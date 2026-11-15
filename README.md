@@ -8,13 +8,14 @@ then generate a structured summary that renders to an editable `.docx`.
 Only the *text* transcript is sent to an LLM for summarization, and that can be
 turned off entirely with `LLM_ENABLED=false`.
 
-> **Version 0.1.0 — executive meetings only.** This release is built to
-> summarize executive and management meetings: the summary prompt, the
-> `MinutesJSON` schema and the `.docx` layout (executive summary, decisions,
-> action items) assume that format. It is not yet a general-purpose meeting
-> summarizer; other meeting types (stand-ups, lectures, interviews, workshops)
-> may produce poorly fitting minutes. General-purpose support is planned for a
-> later version.
+> **Meeting types.** Each meeting has a type — `general` (default),
+> `executive`, `standup`, `lecture`, `interview` or `workshop` — chosen on
+> upload and changeable on the review screen before generating. The type sets
+> the summarizer's persona, what the summary is for, which sections it leans
+> on, and the summary/discussion headings in the editor and `.docx`
+> (`sarai/meeting_types.py`). The `MinutesJSON` schema and the evidence rules
+> (no invented owners, verbatim source quotes) are the same for every type.
+> Meetings created before types existed are treated as `executive`.
 
 ## Build status
 

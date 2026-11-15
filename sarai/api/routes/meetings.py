@@ -26,6 +26,7 @@ from sarai.models import (
     MeetingCreated,
     MeetingDetail,
     MeetingListItem,
+    MeetingType,
 )
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
@@ -76,6 +77,7 @@ async def create_meeting(
     title: str = Form(...),
     meeting_date: str | None = Form(None),
     language_hint: LanguageHint = Form(LanguageHint.AUTO),
+    meeting_type: MeetingType = Form(MeetingType.GENERAL),
     attendees: list[str] = Form(default=[]),
     glossary: list[str] = Form(default=[]),
 ) -> MeetingCreated:
@@ -136,6 +138,7 @@ async def create_meeting(
         audio_path=str(storage.wav_path(meeting_id)),
         duration_sec=info.duration_sec,
         language_hint=language_hint,
+        meeting_type=meeting_type,
         glossary=parsed_glossary,
         attendees=parsed_attendees,
         created_at=db.utcnow(),

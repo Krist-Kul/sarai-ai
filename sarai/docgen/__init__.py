@@ -8,9 +8,10 @@ script, so without `w:cs` Word picks its own substitute font, and without
 `w:szCs` it renders at the wrong point size. Missing either is invisible on a
 developer machine with Sarabun installed and obvious to everyone else.
 
-The section order is the one Thai minutes are read in: attendees, executive
-summary, agenda, discussion, decisions, action items, open questions. Action
-items are the section people actually act on, so they get a table.
+The section order is the one Thai minutes are read in: attendees, summary,
+agenda, discussion, decisions, action items, open questions. Action items are
+the section people actually act on, so they get a table. The summary and
+discussion headings follow the meeting type (sarai/meeting_types.py).
 """
 
 from __future__ import annotations
@@ -28,7 +29,8 @@ from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
 from sarai.docgen.fonts import FONT_NAME, embed_fonts
-from sarai.models import MinutesJSON
+from sarai.meeting_types import profile
+from sarai.models import MeetingType, MinutesJSON
 
 log = logging.getLogger("sarai.docgen")
 
@@ -134,9 +136,16 @@ def _action_table(doc: Document, minutes: MinutesJSON) -> None:
         )
 
 
-def render(minutes: MinutesJSON, dest: Path, *, model: str) -> Path:
+def render(
+    minutes: MinutesJSON,
+    dest: Path,
+    *,
+    model: str,
+    meeting_type: MeetingType = MeetingType.GENERAL,
+) -> Path:
     """Write the minutes to `dest`. Returns the path written."""
     dest.parent.mkdir(parents=True, exist_ok=True)
+    labels = profile(meeting_type)
     doc = new_document()
 
     title = doc.add_paragraph()
@@ -156,7 +165,7 @@ def render(minutes: MinutesJSON, dest: Path, *, model: str) -> Path:
         _attendee_table(doc, minutes)
 
     if minutes.summary:
-        _heading(doc, _bilingual("สรุปผู้บริหาร", "Executive summary"))
+        _heading(doc, _bilingual(*labels.summary_label))
         _body(doc, minutes.summary)
 
     if minutes.agenda:
@@ -165,7 +174,7 @@ def render(minutes: MinutesJSON, dest: Path, *, model: str) -> Path:
             _bullet(doc, item, prefix=f"{index}.")
 
     if minutes.discussion:
-        _heading(doc, _bilingual("รายละเอียดการประชุม", "Discussion"))
+        _heading(doc, _bilingual(*labels.discussion_label))
         for topic in minutes.discussion:
             _heading(doc, topic.topic, size=BODY_PT + 1, space_before=8)
             if topic.speakers:

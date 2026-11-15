@@ -13,9 +13,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "../lib/api";
 import { formatDuration, useI18n } from "../lib/i18n";
+import { MEETING_TYPES } from "../lib/meetingType";
 import { useDebouncedSave } from "../lib/useDebouncedSave";
 import { EditableText } from "../components/EditableText";
-import type { Segment } from "../types";
+import type { MeetingType, Segment } from "../types";
 
 type Filter = "all" | "unnamed" | "low" | "edited";
 
@@ -70,6 +71,15 @@ export function ReviewPage() {
     refetchOnWindowFocus: false,
   });
 
+  const meeting = useQuery({
+    queryKey: ["meeting", id],
+    queryFn: () => api.getMeeting(id),
+    refetchOnWindowFocus: false,
+  });
+  // null until the user picks one: until then the meeting's saved type applies.
+  const [pickedType, setPickedType] = useState<MeetingType | null>(null);
+  const meetingType: MeetingType = pickedType ?? meeting.data?.meeting.meeting_type ?? "general";
+
   const [segments, setSegments] = useState<Segment[]>([]);
   const [speakers, setSpeakers] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
@@ -102,7 +112,7 @@ export function ReviewPage() {
     mutationFn: async () => {
       saveTranscript.flush();
       saveSpeakers.flush();
-      return api.summarize(id);
+      return api.summarize(id, meetingType);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["meeting", id] });
@@ -277,6 +287,19 @@ export function ReviewPage() {
             </>
           )}
         </span>
+        <select
+          aria-label={t("meetingType")}
+          title={t("meetingTypeHelp")}
+          value={meetingType}
+          onChange={(e) => setPickedType(e.target.value as MeetingType)}
+          className="rounded-full border border-line bg-surface px-3 py-2 text-[13px] outline-none focus:border-brand-600"
+        >
+          {MEETING_TYPES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {t(option.key)}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           onClick={() => generate.mutate()}

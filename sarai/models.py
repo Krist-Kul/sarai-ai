@@ -22,6 +22,17 @@ class LanguageHint(StrEnum):
     EN = "en"
 
 
+class MeetingType(StrEnum):
+    """Shapes the summarizer's emphasis and section labels; see sarai/meeting_types.py."""
+
+    GENERAL = "general"
+    EXECUTIVE = "executive"
+    STANDUP = "standup"
+    LECTURE = "lecture"
+    INTERVIEW = "interview"
+    WORKSHOP = "workshop"
+
+
 class JobKind(StrEnum):
     TRANSCRIBE = "transcribe"
     SUMMARIZE = "summarize"
@@ -68,6 +79,7 @@ class Meeting(BaseModel):
     audio_path: str
     duration_sec: float | None = None
     language_hint: LanguageHint = LanguageHint.AUTO
+    meeting_type: MeetingType = MeetingType.GENERAL
     glossary: list[str] = Field(default_factory=list)
     attendees: list[Attendee] = Field(default_factory=list)
     created_at: str
@@ -192,6 +204,13 @@ class SummaryResponse(BaseModel):
     model: str
     has_document: bool = False
     created_at: str
+    meeting_type: MeetingType = MeetingType.GENERAL
+
+
+class SummarizeRequest(BaseModel):
+    """Optional body for POST /summarize. A type given here is saved on the meeting."""
+
+    meeting_type: MeetingType | None = None
 
 
 class SummarizeInput(BaseModel):
@@ -199,6 +218,7 @@ class SummarizeInput(BaseModel):
 
     title: str | None = None
     meeting_date: str | None = None
+    meeting_type: MeetingType = MeetingType.GENERAL
     attendees: list[Attendee] = Field(default_factory=list)
     glossary: list[str] = Field(default_factory=list)
     segments: list[Segment] = Field(default_factory=list)
