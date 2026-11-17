@@ -220,3 +220,29 @@ def render(
     doc.save(str(dest))
     log.info("rendered minutes to %s", dest)
     return dest
+
+
+def render_documents(
+    minutes: MinutesJSON,
+    docx_dest: Path,
+    pdf_dest: Path,
+    *,
+    model: str,
+    meeting_type: MeetingType = MeetingType.GENERAL,
+) -> tuple[Path, Path | None]:
+    """The .docx, then the PDF. Returns (docx path, pdf path or None).
+
+    A PDF failure -- most likely Pango missing on the host -- is logged and
+    leaves the .docx in place: the editable document is the one that matters,
+    and losing it over the PDF would throw away a finished LLM call.
+    """
+    from sarai.docgen.pdf import render_pdf
+
+    docx = render(minutes, docx_dest, model=model, meeting_type=meeting_type)
+    try:
+        pdf: Path | None = render_pdf(minutes, pdf_dest, model=model, meeting_type=meeting_type)
+    except Exception:
+        log.exception("PDF rendering failed; the .docx was still written")
+        pdf_dest.unlink(missing_ok=True)
+        pdf = None
+    return docx, pdf

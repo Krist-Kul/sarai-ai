@@ -14,13 +14,18 @@ Device = Literal["auto", "cuda", "mps", "cpu"]
 AsrBackend = Literal["auto", "transformers", "mlx"]
 
 ALLOWED_UPLOAD_EXTENSIONS: frozenset[str] = frozenset(
-    {".mp3", ".m4a", ".wav", ".ogg", ".flac", ".mp4"}
+    # Anything ffmpeg can pull an audio track out of. Audio formats first, then
+    # video containers: phone, Zoom/Teams/Meet and screen recordings.
+    {
+        *(".mp3", ".m4a", ".wav", ".ogg", ".flac", ".aac", ".opus", ".wma", ".amr", ".aiff"),
+        *(".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi", ".3gp"),
+    }
 )
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=".env.local",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,

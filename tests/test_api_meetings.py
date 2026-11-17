@@ -152,3 +152,32 @@ def test_auto_summarize_is_on_unless_the_uploader_opts_out(
     with db.connection() as conn:
         assert db.get_meeting(conn, auto).auto_summarize is True  # type: ignore[union-attr]
         assert db.get_meeting(conn, manual).auto_summarize is False  # type: ignore[union-attr]
+
+
+def test_meeting_type_is_detected_unless_the_uploader_picks_one(
+    client: TestClient, sample_mp3: Path
+) -> None:
+    """The upload form no longer asks; an API caller that names a type keeps it."""
+    detected = _upload(client, sample_mp3).json()["meeting_id"]
+    chosen = _upload(client, sample_mp3, meeting_type="lecture").json()["meeting_id"]
+
+    with db.connection() as conn:
+        auto = db.get_meeting(conn, detected)
+        picked = db.get_meeting(conn, chosen)
+    assert auto is not None and picked is not None
+    assert auto.detect_type is True
+    assert picked.detect_type is False
+    assert picked.meeting_type == "lecture"
+
+
+def test_a_title_defaulted_from_the_filename_loses_its_extension(
+    client: TestClient, sample_mp3: Path
+) -> None:
+    """Otherwise downloads come out as `meeting.mp4.pdf`."""
+    for title in ("weekly sync.MP4", "weekly sync.wav", "weekly sync.webm", "weekly sync.opus"):
+        mid = _upload(client, sample_mp3, title=title).json()["meeting_id"]
+        with db.connection() as conn:
+            assert db.get_meeting(conn, mid).title == "weekly sync"  # type: ignore[union-attr]
+    kept = _upload(client, sample_mp3, title="v2.1 review").json()["meeting_id"]
+    with db.connection() as conn:
+        assert db.get_meeting(conn, kept).title == "v2.1 review"  # type: ignore[union-attr]

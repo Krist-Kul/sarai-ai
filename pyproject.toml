@@ -9,6 +9,7 @@ dependencies = [
     # Both processes render documents: the worker on job completion, the API
     # when the user edits the minutes and the .docx has to match the screen.
     "python-docx>=1.1",
+    "weasyprint>=62",
 ]
 
 # torch lives ONLY in the `worker` group. The API process must never be able to
@@ -80,7 +81,7 @@ files = ["sarai", "scripts", "tests"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["pyannote.*", "transformers.*", "torch.*", "torchaudio.*", "pythainlp.*", "soundfile.*", "docx.*", "lxml.*", "anthropic.*", "mlx.*", "mlx_whisper.*"]
+module = ["pyannote.*", "transformers.*", "torch.*", "torchaudio.*", "pythainlp.*", "soundfile.*", "docx.*", "lxml.*", "anthropic.*", "mlx.*", "mlx_whisper.*", "weasyprint.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

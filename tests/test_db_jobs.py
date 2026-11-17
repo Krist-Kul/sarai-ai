@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -168,3 +169,37 @@ def test_delete_meeting_removes_all_rows() -> None:
                 f"SELECT COUNT(*) c FROM {table} WHERE meeting_id = ?", (meeting.id,)
             ).fetchone()["c"]
             assert count == 0, table
+
+
+def test_migration_005_strips_upload_extensions_from_old_titles(tmp_path: Path) -> None:
+    import sqlite3 as sq
+
+    from sarai.models import MinutesJSON
+
+    path = tmp_path / "old.db"
+    conn = sq.connect(path)
+    conn.row_factory = sq.Row
+    conn.execute("CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT)")
+    for script in sorted(db.MIGRATIONS_DIR.glob("*.sql")):
+        if script.name.startswith("005"):
+            continue
+        conn.executescript(script.read_text(encoding="utf-8"))
+        conn.execute("INSERT INTO schema_migrations VALUES (?, ?)", (script.name, "x"))
+    for mid, title in (("a", "ประชุม.mp4"), ("b", "notes.FLAC"), ("c", "v2.1 review")):
+        conn.execute(
+            "INSERT INTO meetings (id, title, source_file, audio_path, created_at)"
+            " VALUES (?, ?, ?, '', '')",
+            (mid, title, title),
+        )
+    conn.execute(
+        "INSERT INTO summaries VALUES ('a', ?, 'm', NULL, '')",
+        (MinutesJSON(title="ประชุม.mp4").model_dump_json(),),
+    )
+    conn.commit()
+
+    db.run_migrations(conn)
+
+    titles = dict(conn.execute("SELECT id, title FROM meetings").fetchall())
+    assert titles == {"a": "ประชุม", "b": "notes", "c": "v2.1 review"}
+    data = conn.execute("SELECT data FROM summaries").fetchone()[0]
+    assert MinutesJSON.model_validate_json(data).title == "ประชุม"

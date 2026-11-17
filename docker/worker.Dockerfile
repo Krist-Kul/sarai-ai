@@ -4,6 +4,7 @@ FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3.11 python3.11-venv python3-pip ffmpeg git \
+      libpango-1.0-0 libpangoft2-1.0-0 libthai0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv

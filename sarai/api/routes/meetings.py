@@ -69,6 +69,16 @@ def _parse_attendees(raw: list[str]) -> list[Attendee]:
     return out
 
 
+def clean_title(title: str) -> str:
+    """`weekly sync.mp4` -> `weekly sync`. A title defaulted from the filename
+    would otherwise end up in the minutes heading and as `weekly sync.mp4.pdf`."""
+    text = title.strip()
+    stem, dot, ext = text.rpartition(".")
+    if dot and stem.strip() and f".{ext.lower()}" in ALLOWED_UPLOAD_EXTENSIONS:
+        return stem.strip()
+    return text
+
+
 @router.post("", response_model=MeetingCreated, status_code=201)
 async def create_meeting(
     conn: Db,
@@ -77,7 +87,8 @@ async def create_meeting(
     title: str = Form(...),
     meeting_date: str | None = Form(None),
     language_hint: LanguageHint = Form(LanguageHint.AUTO),
-    meeting_type: MeetingType = Form(MeetingType.GENERAL),
+    # Omitted: the summarize job detects the type from the transcript.
+    meeting_type: MeetingType | None = Form(None),
     auto_summarize: bool = Form(True),
     attendees: list[str] = Form(default=[]),
     glossary: list[str] = Form(default=[]),
@@ -133,13 +144,14 @@ async def create_meeting(
 
     meeting = Meeting(
         id=meeting_id,
-        title=title.strip(),
+        title=clean_title(title),
         meeting_date=meeting_date or None,
         source_file=filename,
         audio_path=str(storage.wav_path(meeting_id)),
         duration_sec=info.duration_sec,
         language_hint=language_hint,
-        meeting_type=meeting_type,
+        meeting_type=meeting_type or MeetingType.GENERAL,
+        detect_type=meeting_type is None,
         auto_summarize=auto_summarize,
         glossary=parsed_glossary,
         attendees=parsed_attendees,

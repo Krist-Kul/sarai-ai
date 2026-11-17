@@ -5,7 +5,8 @@ filename is attacker-controlled text, not a path component.
 
     data/uploads/<meeting_id><ext>   original upload, kept for playback
     data/work/<meeting_id>.wav       16 kHz mono, what the models read
-    data/docs/<meeting_id>.docx      rendered minutes
+    data/docs/<meeting_id>.docx      rendered minutes, editable
+    data/docs/<meeting_id>.pdf       rendered minutes, for sending around
 """
 
 from __future__ import annotations
@@ -39,6 +40,10 @@ def wav_path(meeting_id: str) -> Path:
 
 def docx_path(meeting_id: str) -> Path:
     return get_settings().docs_dir / f"{meeting_id}.docx"
+
+
+def pdf_path(meeting_id: str) -> Path:
+    return get_settings().docs_dir / f"{meeting_id}.pdf"
 
 
 def free_bytes() -> int:

@@ -1,4 +1,5 @@
 .env
+.env.local
 data/
 # Real meeting recordings used for hand-verification. Private audio, and the
 # files are tens of MB -- they stay on the machine that made them.

@@ -9,7 +9,7 @@ services:
     environment:
       DATA_DIR: /data
     env_file:
-      - path: .env
+      - path: .env.local
         required: false
     volumes:
       - ./data:/data
@@ -30,7 +30,7 @@ services:
       DATA_DIR: /data
       HF_HOME: /data/hf-cache
     env_file:
-      - path: .env
+      - path: .env.local
         required: false
     volumes:
       - ./data:/data

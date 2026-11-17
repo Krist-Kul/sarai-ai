@@ -78,6 +78,7 @@ export interface Meeting {
   glossary?: string[];
   attendees?: Attendee[];
   auto_summarize?: boolean;
+  detect_type?: boolean;
   created_at: string;
 }
 

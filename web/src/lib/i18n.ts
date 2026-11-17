@@ -70,8 +70,8 @@ export const strings = {
   glossaryPlaceholder: { th: "พิมพ์แล้วกด Enter", en: "Type and press Enter" },
   dropzone: { th: "ลากไฟล์มาวาง หรือคลิกเพื่อเลือก", en: "Drag a file here, or click to browse" },
   dropzoneHint: {
-    th: "รองรับ mp3, m4a, wav, ogg, flac, mp4 — ไม่เกิน 500 MB",
-    en: "mp3, m4a, wav, ogg, flac, mp4 — up to 500 MB",
+    th: "รองรับไฟล์เสียงและวิดีโอทั่วไป (mp3, m4a, wav, mp4, mov, webm ฯลฯ) — ไม่เกิน 500 MB",
+    en: "Common audio and video files (mp3, m4a, wav, mp4, mov, webm…) — up to 500 MB",
   },
   privacyNote: {
     th: "ไฟล์เสียงถูกประมวลผลบนเครื่องของคุณเท่านั้น ไม่ถูกส่งออกไปยังบริการภายนอก",
@@ -151,8 +151,22 @@ export const strings = {
   speakersDetected: { th: "พบผู้พูด {n} คน", en: "{n} speakers detected" },
 
   uploadStep: { th: "ขั้นที่ 1 จาก 4 · อัปโหลด", en: "Step 1 of 4 · Upload" },
+  dateTime: { th: "วันและเวลาประชุม", en: "Meeting date and time" },
+  speakersOptional: { th: "ผู้พูด (ไม่บังคับ)", en: "Speakers (optional)" },
+  speakersOptionalHelp: {
+    th: "ใส่ชื่อถ้าทราบ ระบบจะจับคู่ชื่อกับเสียงเอง ถ้าไม่ใส่ ระบบจะหาชื่อจากบทสนทนา",
+    en: "Add names if you know them and the system matches them to voices. Leave empty and it finds names in the conversation.",
+  },
+  autoNote: {
+    th: "ระบบจะถอดเสียง ระบุผู้พูด เลือกประเภทการประชุม และสรุปเป็น PDF และ .docx ให้เอง ปิดแท็บได้เลย",
+    en: "Transcription, speaker names, meeting type and the summary are all automatic, ending in a PDF and a .docx. You can close the tab.",
+  },
   fileReady: { th: "พร้อมอัปโหลด", en: "ready to upload" },
   replaceFile: { th: "เปลี่ยนไฟล์", en: "Replace" },
+  unsupportedFile: {
+    th: "ไฟล์นี้ไม่รองรับ ใช้ไฟล์เสียง (.mp3 .m4a .wav .ogg .flac .aac .opus .wma .amr .aiff) หรือวิดีโอ (.mp4 .mov .mkv .webm .m4v .avi .3gp)",
+    en: "Unsupported file. Use audio (.mp3 .m4a .wav .ogg .flac .aac .opus .wma .amr .aiff) or video (.mp4 .mov .mkv .webm .m4v .avi .3gp)",
+  },
   meetingDetails: { th: "รายละเอียดการประชุม", en: "Meeting details" },
   helpTitle: { th: "ช่วยให้ถอดเสียงแม่นยำขึ้น", en: "Help the transcription" },
   helpSubtitle: {
@@ -242,6 +256,7 @@ export const strings = {
     en: "Regeneration queued. The current minutes are replaced when it finishes.",
   },
   downloadDocx: { th: "ดาวน์โหลด .docx", en: "Download .docx" },
+  downloadPdf: { th: "ดาวน์โหลด PDF", en: "Download PDF" },
   noMinutesTitle: { th: "ยังไม่มีรายงานการประชุม", en: "No minutes yet" },
   noMinutesBody: {
     th: "ตรวจทานข้อความให้เรียบร้อยแล้วกดสร้างรายงาน",

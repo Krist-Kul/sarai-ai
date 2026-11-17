@@ -95,10 +95,11 @@ async def update_summary(
 
     from sarai import docgen  # imported lazily: the API only needs it on this path
 
-    path = await to_thread.run_sync(
-        lambda: docgen.render(
+    path, _pdf = await to_thread.run_sync(
+        lambda: docgen.render_documents(
             payload,
             storage.docx_path(meeting.id),
+            storage.pdf_path(meeting.id),
             model=current.model,
             meeting_type=meeting.meeting_type,
         )
@@ -117,3 +118,13 @@ def get_document(meeting: RequiredMeeting, conn: Db) -> FileResponse:
         raise HTTPException(404, "The document is missing from disk; regenerate the minutes")
     # Thai filenames survive the trip: Starlette encodes them per RFC 5987.
     return FileResponse(file, media_type=DOCX_MEDIA_TYPE, filename=f"{meeting.title}.docx")
+
+
+@router.get("/{meeting_id}/pdf")
+def get_pdf(meeting: RequiredMeeting, conn: Db) -> FileResponse:
+    if db.get_summary_docx_path(conn, meeting.id) is None:
+        raise HTTPException(404, "This meeting has no rendered document")
+    file = storage.pdf_path(meeting.id)
+    if not file.is_file():
+        raise HTTPException(404, "The PDF is missing from disk; regenerate the minutes")
+    return FileResponse(file, media_type="application/pdf", filename=f"{meeting.title}.pdf")

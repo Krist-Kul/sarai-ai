@@ -91,6 +91,9 @@ class Meeting(BaseModel):
     # defaults it on; the model defaults it off so that code creating meetings
     # directly gets the review-first flow unless it asks otherwise.
     auto_summarize: bool = False
+    # No type was given on upload: the summarize job detects one from the
+    # transcript, saves it on the meeting and clears this flag.
+    detect_type: bool = False
     created_at: str
 
 

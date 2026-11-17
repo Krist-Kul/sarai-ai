@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "../lib/api";
 import { formatDateTime, formatDuration, useI18n } from "../lib/i18n";
+import { MEETING_TYPES } from "../lib/meetingType";
 import { stageKind } from "../lib/stage";
 import { useElapsed, useJobEvents } from "../lib/useJobEvents";
 import { StageBadge } from "../components/StageBadge";
@@ -193,8 +194,14 @@ export function MeetingPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-[12.5px] text-ink-600">{t("language")}</dt>
-                <dd className="mt-0.5 font-semibold uppercase">{m.language_hint}</dd>
+                <dt className="text-[12.5px] text-ink-600">{t("meetingType")}</dt>
+                <dd className="mt-0.5 font-semibold">
+                  {/* Until the summarize job has detected it, the stored type
+                      is only a placeholder. */}
+                  {m.detect_type
+                    ? "—"
+                    : t(MEETING_TYPES.find((o) => o.value === m.meeting_type)?.key ?? "typeGeneral")}
+                </dd>
               </div>
               <div>
                 <dt className="text-[12.5px] text-ink-600">
@@ -267,6 +274,12 @@ export function MeetingPage() {
                     >
                       {t("actionOpen")}
                     </Link>
+                    <a
+                      href={api.pdfUrl(m.id)}
+                      className="rounded-full bg-brand-600 px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-brand-600/90"
+                    >
+                      {t("downloadPdf")}
+                    </a>
                     <a
                       href={api.documentUrl(m.id)}
                       className="rounded-full border border-line bg-surface px-4 py-2 text-[13.5px] font-semibold hover:border-ink-200"

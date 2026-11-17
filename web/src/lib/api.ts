@@ -94,16 +94,18 @@ export const api = {
       body: JSON.stringify(minutes),
     }),
   documentUrl: (id: string) => `/api/meetings/${id}/document`,
+  pdfUrl: (id: string) => `/api/meetings/${id}/pdf`,
 
   createMeeting: (input: {
     file: File;
     title: string;
     meetingDate?: string;
     languageHint: LanguageHint;
-    meetingType: MeetingType;
+    // Omitted: the worker detects the type from the transcript.
+    meetingType?: MeetingType;
     autoSummarize: boolean;
     attendees: Attendee[];
-    glossary: string[];
+    glossary?: string[];
     onProgress?: (fraction: number) => void;
   }): Promise<MeetingCreated> => {
     const form = new FormData();
@@ -111,10 +113,10 @@ export const api = {
     form.append("title", input.title);
     if (input.meetingDate) form.append("meeting_date", input.meetingDate);
     form.append("language_hint", input.languageHint);
-    form.append("meeting_type", input.meetingType);
+    if (input.meetingType) form.append("meeting_type", input.meetingType);
     form.append("auto_summarize", String(input.autoSummarize));
     for (const a of input.attendees) form.append("attendees", JSON.stringify(a));
-    for (const g of input.glossary) form.append("glossary", g);
+    for (const g of input.glossary ?? []) form.append("glossary", g);
 
     // XHR rather than fetch: uploads are up to 500 MB and the user needs a
     // progress bar, which fetch still cannot give us for request bodies.

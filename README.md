@@ -8,9 +8,18 @@ then generate a structured summary that renders to an editable `.docx`.
 Only the *text* transcript is sent to an LLM for summarization, and that can be
 turned off entirely with `LLM_ENABLED=false`.
 
+> **Hands-off flow.** The upload form asks for the recording, a title, the
+> date and time and, optionally, who was there. Everything after that is
+> automatic: transcription, then one LLM call that detects the meeting type and
+> names each diarized speaker (`sarai/llm/analyze.py`), then the summary, ending
+> in a `.docx` and a PDF. A speaker is only named when a verbatim quote in the
+> transcript supports it; anyone else becomes `ผู้พูด 1`, `ผู้พูด 2`, ... The PDF
+> is rendered with WeasyPrint, which needs Pango on the host
+> (`libpango-1.0-0 libpangoft2-1.0-0 libthai0` on Debian/Ubuntu).
+>
 > **Meeting types.** Each meeting has a type — `general` (default),
-> `executive`, `standup`, `lecture`, `interview` or `workshop` — chosen on
-> upload and changeable on the review screen before generating. The type sets
+> `executive`, `standup`, `lecture`, `interview` or `workshop` — detected from
+> the transcript and changeable on the review screen before regenerating. The type sets
 > the summarizer's persona, what the summary is for, which sections it leans
 > on, and the summary/discussion headings in the editor and `.docx`
 > (`sarai/meeting_types.py`). The `MinutesJSON` schema and the evidence rules
@@ -103,7 +112,7 @@ web (React/TS, :5173) ──HTTP/JSON──> api (FastAPI, :8000) ──> SQLite
 ## Quick start
 
 ```bash
-cp .env.example .env      # then edit
+cp .env.example .env.local   # then edit
 make install              # API + dev deps and the frontend (no torch)
 make dev                  # api :8000, worker, web :5173
 ```

@@ -195,6 +195,16 @@ export function MinutesPage() {
           >
             {t("downloadDocx")}
           </a>
+          <a
+            href={api.pdfUrl(id)}
+            className={`rounded-full px-4 py-2 text-[13.5px] font-bold ${
+              summary.data.has_document
+                ? "bg-brand-600 text-white hover:bg-brand-600/90"
+                : "pointer-events-none bg-ink-200 text-surface"
+            }`}
+          >
+            {t("downloadPdf")}
+          </a>
         </div>
 
         {regenerate.isSuccess && (

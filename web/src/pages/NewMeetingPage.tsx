@@ -5,17 +5,24 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { AttendeeRows } from "../components/AttendeeRows";
-import { ChipInput } from "../components/ChipInput";
 import { Dropzone } from "../components/Dropzone";
-import { MEETING_TYPES } from "../lib/meetingType";
-import type { Attendee, LanguageHint, MeetingType } from "../types";
+import type { Attendee } from "../types";
 
-const LANG_OPTIONS: { value: LanguageHint; key: "langAuto" | "langTh" | "langEn" }[] = [
-  { value: "auto", key: "langAuto" },
-  { value: "th", key: "langTh" },
-  { value: "en", key: "langEn" },
-];
+/** `2026-11-18T14:30` from <input type="datetime-local"> -> `2026-11-18 14:30`,
+ * which is how it reads in the minutes. */
+function formatMeetingTime(value: string): string | undefined {
+  return value ? value.replace("T", " ") : undefined;
+}
 
+/** `weekly sync.mp4` -> `weekly sync`: the default title, without the extension. */
+function baseName(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+// Upload is the only step a person takes. Language, meeting type, speaker
+// names and the summary are all worked out by the worker; the meeting page
+// follows it through to the PDF and .docx.
 export function NewMeetingPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -23,27 +30,20 @@ export function NewMeetingPage() {
 
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
-  const [meetingDate, setMeetingDate] = useState("");
-  const [languageHint, setLanguageHint] = useState<LanguageHint>("auto");
-  const [meetingType, setMeetingType] = useState<MeetingType>("general");
-  const [autoSummarize, setAutoSummarize] = useState(true);
-  const [attendees, setAttendees] = useState<Attendee[]>([{ name: "", role: null }]);
-  const [glossary, setGlossary] = useState<string[]>([]);
+  const [meetingTime, setMeetingTime] = useState("");
+  const [speakers, setSpeakers] = useState<Attendee[]>([]);
   const [progress, setProgress] = useState(0);
-  const [helpOpen, setHelpOpen] = useState(true);
 
   const upload = useMutation({
     mutationFn: () => {
       if (!file) throw new ApiError("No file selected", 0);
       return api.createMeeting({
         file,
-        title: title.trim() || file.name,
-        meetingDate: meetingDate || undefined,
-        languageHint,
-        meetingType,
-        autoSummarize,
-        attendees: attendees.filter((a) => a.name.trim() !== ""),
-        glossary,
+        title: title.trim() || baseName(file.name),
+        meetingDate: formatMeetingTime(meetingTime),
+        languageHint: "auto",
+        autoSummarize: true,
+        attendees: speakers.filter((a) => a.name.trim() !== ""),
         onProgress: setProgress,
       });
     },
@@ -66,20 +66,7 @@ export function NewMeetingPage() {
         if (file && !upload.isPending) upload.mutate();
       }}
     >
-      <div className="flex flex-wrap items-center gap-3.5">
-        <h1 className="text-2xl font-bold tracking-tight">{t("newMeeting")}</h1>
-        <span className="text-[13px] text-ink-600">{t("uploadStep")}</span>
-        {/* Four dashes for four steps: upload, transcribe, review, minutes.
-            Only the first is on this screen; the rest live on the job page. */}
-        <span className="ml-auto flex items-center gap-1.5" aria-hidden>
-          {[0, 1, 2, 3].map((i) => (
-            <span
-              key={i}
-              className={`h-1.5 w-6 rounded-full ${i === 0 ? "bg-brand-600" : "bg-line"}`}
-            />
-          ))}
-        </span>
-      </div>
+      <h1 className="text-2xl font-bold tracking-tight">{t("newMeeting")}</h1>
 
       <div className={card}>
         <Dropzone file={file} onSelect={setFile} />
@@ -87,7 +74,7 @@ export function NewMeetingPage() {
 
       <div className={card}>
         <h2 className="mb-3 text-[15px] font-bold">{t("meetingDetails")}</h2>
-        <div className="grid gap-3.5 sm:grid-cols-[1fr_220px_200px]">
+        <div className="grid gap-3.5 sm:grid-cols-[1fr_240px]">
           <div>
             <label className={label} htmlFor="title">
               {t("title")}
@@ -97,101 +84,28 @@ export function NewMeetingPage() {
               className={input}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={file?.name ?? ""}
+              placeholder={file ? baseName(file.name) : ""}
             />
           </div>
           <div>
-            <label className={label} htmlFor="date">
-              {t("date")}
+            <label className={label} htmlFor="time">
+              {t("dateTime")}
             </label>
             <input
-              id="date"
-              type="date"
+              id="time"
+              type="datetime-local"
               className={input}
-              value={meetingDate}
-              onChange={(e) => setMeetingDate(e.target.value)}
+              value={meetingTime}
+              onChange={(e) => setMeetingTime(e.target.value)}
             />
           </div>
-          <fieldset>
-            <legend className={label}>{t("language")}</legend>
-            <div className="mt-1.5 flex rounded-[10px] border border-line bg-canvas p-0.5">
-              {LANG_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setLanguageHint(option.value)}
-                  className={`flex-1 rounded-lg py-1.5 text-[13px] whitespace-nowrap ${
-                    languageHint === option.value
-                      ? "bg-surface font-semibold shadow-sm"
-                      : "text-ink-600 hover:text-ink-900"
-                  }`}
-                >
-                  {t(option.key)}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-        </div>
-        <div className="mt-3.5">
-          <label className={label} htmlFor="meeting-type">
-            {t("meetingType")}
-          </label>
-          <span className="ml-2 text-xs text-ink-400">{t("meetingTypeHelp")}</span>
-          <select
-            id="meeting-type"
-            className={`${input} sm:max-w-xs`}
-            value={meetingType}
-            onChange={(e) => setMeetingType(e.target.value as MeetingType)}
-          >
-            {MEETING_TYPES.map((option) => (
-              <option key={option.value} value={option.value}>
-                {t(option.key)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <label className="mt-3.5 flex items-start gap-2.5 text-sm">
-          <input
-            type="checkbox"
-            className="mt-0.5 size-4 accent-brand-600"
-            checked={autoSummarize}
-            onChange={(e) => setAutoSummarize(e.target.checked)}
-          />
-          <span>
-            <span className="font-semibold">{t("autoSummarize")}</span>
-            <span className="block text-xs text-ink-400">{t("autoSummarizeHelp")}</span>
-          </span>
-        </label>
-      </div>
-
-      <div className={card}>
-        <div className="flex flex-wrap items-baseline gap-2.5">
-          <h2 className="text-[15px] font-bold">{t("helpTitle")}</h2>
-          <span className="text-[12.5px] text-ink-600">{t("helpSubtitle")}</span>
-          <button
-            type="button"
-            onClick={() => setHelpOpen((open) => !open)}
-            className="ml-auto text-[12.5px] font-semibold text-brand-600 hover:underline"
-          >
-            {helpOpen ? t("hide") : t("show")}
-          </button>
         </div>
 
-        {helpOpen && (
-          <div className="mt-3.5 grid gap-6 md:grid-cols-2">
-            <div>
-              <span className={label}>{t("attendees")}</span>
-              <div className="mt-2">
-                <AttendeeRows values={attendees} onChange={setAttendees} />
-              </div>
-            </div>
-            <div>
-              <span className={label}>{t("glossary")}</span>
-              <p className="mt-1 mb-2 text-xs text-ink-400">{t("glossaryHelp")}</p>
-              <ChipInput values={glossary} onChange={setGlossary} />
-            </div>
-          </div>
-        )}
+        <div className="mt-4">
+          <span className={label}>{t("speakersOptional")}</span>
+          <p className="mt-1 mb-2 text-xs text-ink-400">{t("speakersOptionalHelp")}</p>
+          <AttendeeRows values={speakers} onChange={setSpeakers} />
+        </div>
       </div>
 
       {upload.isError && (
@@ -217,7 +131,7 @@ export function NewMeetingPage() {
         >
           {upload.isPending ? t("submitting") : t("submit")}
         </button>
-        <span className="text-[13px] text-ink-600">{t("submitNote")}</span>
+        <span className="text-[13px] text-ink-600">{t("autoNote")}</span>
       </div>
     </form>
   );

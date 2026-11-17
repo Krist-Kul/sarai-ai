@@ -3,6 +3,8 @@ SHELL := /bin/bash
 
 UV ?= uv
 NPM ?= npm
+# The API port. `make web` points the Vite proxy at it, so the two never disagree.
+API_PORT ?= 8001
 
 .PHONY: help
 help: ## Show this help
@@ -24,7 +26,7 @@ install-worker: ## Add the worker deps (torch, transformers, pyannote) -- severa
 
 .PHONY: api
 api: ## Run the API with reload
-	$(UV) run uvicorn sarai.api.main:app --reload --host 0.0.0.0 --port 8000
+	$(UV) run uvicorn sarai.api.main:app --reload --host 0.0.0.0 --port $(API_PORT)
 
 .PHONY: worker
 worker: ## Run the worker
@@ -32,7 +34,7 @@ worker: ## Run the worker
 
 .PHONY: web
 web: ## Run the Vite dev server
-	cd web && $(NPM) run dev
+	cd web && SARAI_API_URL=http://localhost:$(API_PORT) $(NPM) run dev
 
 .PHONY: dev
 dev: ## Run API + worker + web together (Ctrl-C stops all three)

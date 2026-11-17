@@ -109,6 +109,7 @@ def test_summary_and_document_404_until_minutes_exist(client: TestClient) -> Non
     mid = _meeting()
     assert client.get(f"/api/meetings/{mid}/summary").status_code == 404
     assert client.get(f"/api/meetings/{mid}/document").status_code == 404
+    assert client.get(f"/api/meetings/{mid}/pdf").status_code == 404
 
 
 def test_editing_the_summary_saves_and_rerenders_the_document(client: TestClient) -> None:
@@ -134,6 +135,12 @@ def test_editing_the_summary_saves_and_rerenders_the_document(client: TestClient
         "application/vnd.openxmlformats-officedocument"
     )
     assert download.content[:2] == b"PK"  # a .docx is a zip
+
+    # The PDF is re-rendered from the same edit.
+    pdf = client.get(f"/api/meetings/{mid}/pdf")
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content[:5] == b"%PDF-"
 
 
 def test_document_404s_when_the_file_vanished_from_disk(client: TestClient) -> None:

@@ -202,6 +202,11 @@ def summarize(conn: sqlite3.Connection, job: Job) -> None:
             "This meeting has no transcript yet. Transcribe it before generating minutes."
         )
 
+    if meeting.detect_type or _unnamed_speakers(transcript.speakers):
+        identify(conn, job)
+        meeting = db.get_meeting(conn, job.meeting_id) or meeting
+        transcript = db.get_transcript(conn, meeting.id) or transcript
+
     inp = SummarizeInput(
         title=meeting.title,
         meeting_date=meeting.meeting_date,
@@ -237,16 +242,77 @@ def summarize(conn: sqlite3.Connection, job: Job) -> None:
 
     # The LLM call can outlast a cancel; do not overwrite saved minutes for a
     # job the user already stopped.
-    _progress(conn, job, Stage.RENDERING, 0.85, "rendering the .docx")
-    path = docgen.render(
-        minutes, storage.docx_path(meeting.id), model=model, meeting_type=meeting.meeting_type
+    _progress(conn, job, Stage.RENDERING, 0.85, "rendering the .docx and PDF")
+    path, pdf = docgen.render_documents(
+        minutes,
+        storage.docx_path(meeting.id),
+        storage.pdf_path(meeting.id),
+        model=model,
+        meeting_type=meeting.meeting_type,
     )
     db.save_summary(conn, meeting.id, minutes, model, str(path))
 
     detail = f"{len(minutes.action_items)} action item(s)"
     if dropped:
         detail += f", {dropped} dropped for unverifiable quotes"
+    if pdf is None:
+        detail += ", PDF could not be rendered (see worker log)"
     _progress(conn, job, Stage.RENDERING, 0.95, detail)
+
+
+def _unnamed_speakers(speakers: dict[str, str]) -> list[str]:
+    """Labels still showing the raw diarization key -- nobody has named them."""
+    return [key for key, label in speakers.items() if label.strip() in ("", key)]
+
+
+def identify(conn: sqlite3.Connection, job: Job) -> None:
+    """Detect the meeting type and name the speakers, from the transcript.
+
+    Only fills in what nobody has set: a type chosen by a person, and a
+    speaker someone renamed in the review editor, are never overwritten.
+    Best effort -- if the call fails, the minutes are still written, with the
+    stored type and neutral speaker labels.
+    """
+    import asyncio
+
+    from sarai.llm import LLMError
+    from sarai.llm.analyze import analyze, fallback_labels
+    from sarai.models import SummarizeInput
+
+    meeting = db.get_meeting(conn, job.meeting_id)
+    transcript = db.get_transcript(conn, job.meeting_id)
+    if meeting is None or transcript is None:
+        return
+    unnamed = _unnamed_speakers(transcript.speakers)
+
+    _progress(conn, job, Stage.SUMMARIZING, 0.05, "identifying meeting type and speakers")
+    inp = SummarizeInput(
+        title=meeting.title,
+        attendees=meeting.attendees,
+        segments=transcript.segments,
+        speakers=transcript.speakers,
+    )
+    try:
+        detected, names = asyncio.run(analyze(inp, get_settings()))
+    except LLMError as exc:
+        log.warning("job=%s speaker/type identification failed: %s", job.id, exc)
+        detected, names = None, {}
+
+    if meeting.detect_type and detected is not None:
+        db.set_meeting_type(conn, meeting.id, detected)
+        log.info("job=%s detected meeting type %s", job.id, detected.value)
+
+    # After a failed call the raw keys stay, so a regenerate tries again.
+    if unnamed and detected is not None:
+        labels = fallback_labels(unnamed)
+        labels.update({k: v for k, v in names.items() if k in labels})
+        db.save_speakers(conn, meeting.id, labels)
+        log.info(
+            "job=%s named %d of %d speaker(s) from the transcript",
+            job.id,
+            sum(1 for k in unnamed if k in names),
+            len(unnamed),
+        )
 
 
 def chain_summarize(conn: sqlite3.Connection, job: Job) -> str | None:

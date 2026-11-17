@@ -134,6 +134,7 @@ def _meeting_from_row(row: sqlite3.Row) -> Meeting:
         glossary=json.loads(row["glossary"] or "[]"),
         attendees=[Attendee.model_validate(a) for a in json.loads(row["attendees"] or "[]")],
         auto_summarize=bool(row["auto_summarize"]),
+        detect_type=bool(row["detect_type"]),
         created_at=row["created_at"],
     )
 
@@ -163,8 +164,8 @@ def create_meeting(conn: sqlite3.Connection, meeting: Meeting) -> Meeting:
     conn.execute(
         """INSERT INTO meetings (id, title, meeting_date, source_file, audio_path,
                                  duration_sec, language_hint, meeting_type, glossary,
-                                 attendees, auto_summarize, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                 attendees, auto_summarize, detect_type, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             meeting.id,
             meeting.title,
@@ -177,6 +178,7 @@ def create_meeting(conn: sqlite3.Connection, meeting: Meeting) -> Meeting:
             json.dumps(meeting.glossary, ensure_ascii=False),
             json.dumps([a.model_dump() for a in meeting.attendees], ensure_ascii=False),
             int(meeting.auto_summarize),
+            int(meeting.detect_type),
             meeting.created_at,
         ),
     )
@@ -184,8 +186,10 @@ def create_meeting(conn: sqlite3.Connection, meeting: Meeting) -> Meeting:
 
 
 def set_meeting_type(conn: sqlite3.Connection, meeting_id: str, meeting_type: MeetingType) -> None:
+    """A type set here is final: detection never overrides it afterwards."""
     conn.execute(
-        "UPDATE meetings SET meeting_type = ? WHERE id = ?", (meeting_type.value, meeting_id)
+        "UPDATE meetings SET meeting_type = ?, detect_type = 0 WHERE id = ?",
+        (meeting_type.value, meeting_id),
     )
 
 
