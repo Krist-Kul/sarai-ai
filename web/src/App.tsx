@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Route, Routes } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
+import { ButtonLink, Mark, Notice } from "./components/ui";
 import { api } from "./lib/api";
 import { LangContext, loadLang, saveLang, useI18n, type Lang } from "./lib/i18n";
 import { MeetingsPage } from "./pages/MeetingsPage";
@@ -13,13 +14,15 @@ import { MinutesPage } from "./pages/MinutesPage";
 function LanguageToggle() {
   const { lang, setLang } = useI18n();
   return (
-    <div className="flex rounded-full border border-line bg-surface p-0.5 text-xs font-semibold cursor-pointer">
+    <div className="flex rounded-full border border-line bg-surface-raised p-[3px]">
       {(["th", "en"] as const).map((code) => (
         <button
           key={code}
+          type="button"
           onClick={() => setLang(code)}
-          className={`rounded-full px-2.5 py-1 cursor-pointer ${
-            lang === code ? "bg-ink-900 text-surface" : "text-ink-600 hover:text-ink-900"
+          aria-pressed={lang === code}
+          className={`cursor-pointer rounded-full px-3 py-1 text-small-strong ${
+            lang === code ? "bg-ink text-on-ink" : "text-ink-muted hover:text-ink"
           }`}
         >
           {code === "th" ? "ไทย" : "EN"}
@@ -38,44 +41,31 @@ function WorkerBanner() {
     refetchInterval: 15_000,
   });
   if (!data || data.worker_alive) return null;
-  return (
-    <div className="border-b border-warn-line bg-warn-50 px-4 py-2.5 text-sm text-warn-700 sm:px-6">
-      <div className="mx-auto flex max-w-6xl items-center gap-2.5">
-        <span className="size-1.5 shrink-0 rounded-full bg-warn-500" aria-hidden />
-        {t("workerDown")}
-      </div>
-    </div>
-  );
+  return <Notice tone="live">{t("workerDown")}</Notice>;
 }
 
 function Header() {
   const { t } = useI18n();
   const linkClass = ({ isActive }: { isActive: boolean }) =>
-    `rounded-full px-3.5 py-1.5 text-sm ${
-      isActive ? "bg-sand font-semibold text-ink-900" : "text-ink-600 hover:text-ink-900"
+    // Hidden on phones: the logo already goes to the list, and the row has no room.
+    `whitespace-nowrap rounded-full px-3.5 py-1.5 text-label max-sm:hidden ${
+      isActive ? "bg-surface-raised text-ink" : "text-ink-muted hover:text-ink"
     }`;
   return (
-    <header className="border-b border-line bg-surface">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
-        <Link to="/" className="flex items-center gap-2.5">
-          <span className="flex size-7 items-center justify-center rounded-[9px] bg-brand-600 text-sm font-bold text-white">
-            S
-          </span>
-          <span className="text-[17px] font-bold tracking-tight">{t("appName")}</span>
-          <span className="hidden text-xs text-ink-400 md:inline">{t("tagline")}</span>
+    <header className="sticky top-0 z-20 border-b border-line bg-surface/80 backdrop-blur-[16px]">
+      <div className="mx-auto flex min-h-16 max-w-[1152px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
+        <Link to="/" className="flex items-center" aria-label={t("appName")}>
+          <Mark />
         </Link>
+        <span className="hidden text-small text-ink-subtle md:inline">{t("tagline")}</span>
         <nav className="ml-auto flex items-center gap-1.5">
           <NavLink to="/" end className={linkClass}>
             {t("meetings")}
           </NavLink>
           <LanguageToggle />
-          <Link
-            to="/new"
-            className="ml-1 rounded-full bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-600/90"
-          >
-            <span aria-hidden>＋ </span>
+          <ButtonLink to="/new" icon="upload" className="ml-1 max-sm:h-8 max-sm:px-4">
             {t("newMeeting")}
-          </Link>
+          </ButtonLink>
         </nav>
       </div>
     </header>
@@ -101,7 +91,7 @@ export default function App() {
       <div className="min-h-screen">
         <WorkerBanner />
         <Header />
-        <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-9">
+        <main className="mx-auto max-w-[1152px] px-4 pt-8 pb-16 sm:px-6 sm:pt-10 sm:pb-[72px]">
           <Routes>
             <Route path="/" element={<MeetingsPage />} />
             <Route path="/new" element={<NewMeetingPage />} />

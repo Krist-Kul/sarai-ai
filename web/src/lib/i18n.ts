@@ -29,8 +29,37 @@ export const strings = {
   newMeeting: { th: "อัปโหลดการประชุม", en: "Upload meeting" },
   emptyTitle: { th: "ยังไม่มีการประชุม", en: "No meetings yet" },
   emptyBody: {
-    th: "อัปโหลดไฟล์เสียงการประชุมเพื่อเริ่มถอดเสียงและสรุปรายงาน",
-    en: "Upload a recording to transcribe it and draft the minutes.",
+    th: "อัปโหลดไฟล์เสียงการประชุมเพื่อเริ่มถอดเสียงและสรุปรายงาน — ทั้งหมดประมวลผลบนเครื่องของคุณเอง",
+    en: "Upload a recording to transcribe it and draft the minutes — all of it processed on your own machine.",
+  },
+  meetingsSubtitle: {
+    th: "ไฟล์เสียงทั้งหมดถูกประมวลผลบนเครื่องนี้ — ไม่มีอะไรออกนอกองค์กร",
+    en: "Every recording is processed on this machine — nothing leaves the organization.",
+  },
+  statReview: { th: "รอตรวจทาน", en: "Awaiting review" },
+  statProcessing: { th: "กำลังประมวลผล", en: "Processing" },
+  statDoneMonth: { th: "เสร็จสิ้นเดือนนี้", en: "Finished this month" },
+  statHours: { th: "ชั่วโมงที่ถอดเสียง", en: "Hours transcribed" },
+  filterReview: { th: "รอตรวจทาน", en: "To review" },
+  filterProcessing: { th: "กำลังประมวลผล", en: "Processing" },
+  filterFinished: { th: "เสร็จสิ้น", en: "Done" },
+  filterFailed: { th: "ล้มเหลว", en: "Failed" },
+  sortBy: { th: "เรียงตาม", en: "Sort by" },
+  sortNewest: { th: "ล่าสุดก่อน", en: "Newest first" },
+  sortOldest: { th: "เก่าสุดก่อน", en: "Oldest first" },
+  stepUploadTitle: { th: "อัปโหลดไฟล์", en: "Upload a file" },
+  stepUploadBody: { th: "รองรับเสียงและวิดีโอทั่วไป ไม่เกิน 500 MB", en: "Common audio and video, up to 500 MB" },
+  stepTranscribeTitle: { th: "ถอดเสียงอัตโนมัติ", en: "Automatic transcription" },
+  stepTranscribeBody: {
+    th: "แยกผู้พูดและถอดเสียงทีละช่วง บน GPU ของคุณ",
+    en: "Speakers separated and transcribed turn by turn, on your GPU",
+  },
+  stepReviewTitle: { th: "ตรวจทานข้อความ", en: "Review the text" },
+  stepReviewBody: { th: "ตั้งชื่อผู้พูดครั้งเดียว แก้คำผิดได้ทันที", en: "Name speakers once, fix typos in place" },
+  stepMinutesTitle: { th: "รับรายงาน", en: "Get the minutes" },
+  stepMinutesBody: {
+    th: "สรุป มติ และสิ่งที่ต้องทำ เป็น PDF และ .docx",
+    en: "Summary, resolutions and action items as PDF and .docx",
   },
   uploadCta: { th: "อัปโหลดไฟล์เสียง", en: "Upload audio" },
   title: { th: "หัวข้อการประชุม", en: "Meeting title" },
@@ -50,6 +79,7 @@ export const strings = {
     th: "กำหนดรูปแบบของสรุปและหัวข้อในเอกสาร",
     en: "Shapes the summary and the document's sections",
   },
+  typeAuto: { th: "ตรวจจับอัตโนมัติ", en: "Detect automatically" },
   typeGeneral: { th: "ทั่วไป", en: "General" },
   typeExecutive: { th: "ผู้บริหาร", en: "Executive" },
   typeStandup: { th: "อัปเดตงานทีม", en: "Stand-up" },
@@ -105,6 +135,10 @@ export const strings = {
   queuedNote: {
     th: "อยู่ในคิว รอ worker ว่างเพื่อเริ่มประมวลผล",
     en: "In the queue, waiting for a free worker.",
+  },
+  retryingNote: {
+    th: "การประมวลผลครั้งก่อนล้มเหลว ระบบจะลองใหม่อัตโนมัติ —",
+    en: "The last attempt failed and will be retried automatically —",
   },
   readyNote: {
     th: "ถอดเสียงเสร็จแล้ว พร้อมให้ตรวจทาน",
@@ -173,6 +207,11 @@ export const strings = {
     th: "ไม่บังคับ — แต่ชื่อคนและศัพท์เฉพาะจะออกมาถูกต้องขึ้นชัดเจน",
     en: "Optional — but names and jargon come out measurably better",
   },
+  optional: { th: "ไม่บังคับ", en: "Optional" },
+  speedNote: {
+    th: "ถอดเสียงบนเครื่องนี้ ใช้เวลาราวหนึ่งในสิบของความยาวไฟล์",
+    en: "Transcribing runs on this machine at roughly a tenth of the recording length.",
+  },
   hide: { th: "ซ่อน", en: "Hide" },
   show: { th: "แสดง", en: "Show" },
   submitNote: {
@@ -182,6 +221,22 @@ export const strings = {
 
   currentStep: { th: "ขั้นตอนตอนนี้", en: "Current step" },
   nextUp: { th: "ขั้นต่อไป", en: "Next up" },
+  allMeetings: { th: "การประชุมทั้งหมด", en: "All meetings" },
+  eta: { th: "คาดว่าเสร็จใน", en: "Estimated remaining" },
+  latestTranscript: { th: "ถอดเสียงล่าสุด", en: "Latest transcript" },
+  openTranscript: { th: "เปิดบทถอดเสียง", en: "Open transcript" },
+  nextUpReview: {
+    th: "เมื่อถอดเสียงเสร็จ คุณจะได้ตั้งชื่อผู้พูดและแก้ข้อความ ก่อนสร้างรายงาน ปิดแท็บนี้ได้เลย",
+    en: "When transcription finishes you name the speakers and fix the text before the minutes are made. You can close this tab.",
+  },
+  nextUpAuto: {
+    th: "เมื่อถอดเสียงเสร็จ ระบบจะตั้งชื่อผู้พูดและสรุปเป็น PDF และ .docx ให้เอง ปิดแท็บนี้ได้เลย",
+    en: "When transcription finishes the speakers are named and the minutes written as a PDF and .docx. You can close this tab.",
+  },
+  nextUpMinutes: {
+    th: "กำลังเขียนรายงาน เสร็จแล้วจะดาวน์โหลดเป็น PDF และ .docx ได้ที่นี่",
+    en: "The minutes are being written. The PDF and .docx will be downloadable here.",
+  },
   stopJob: { th: "หยุดงาน", en: "Stop job" },
   stopJobConfirm: { th: "ยืนยันหยุดงาน", en: "Confirm stop" },
   stopJobCancel: { th: "ไม่หยุด", en: "Keep running" },
@@ -219,12 +274,20 @@ export const strings = {
   spaceToPlay: { th: "กด Space เพื่อเล่น/หยุด", en: "Space plays and pauses" },
   saving: { th: "กำลังบันทึก…", en: "Saving…" },
   allSaved: { th: "บันทึกแล้วทั้งหมด", en: "All changes saved" },
+  autosaved: { th: "บันทึกอัตโนมัติ", en: "Autosaved" },
+  speakerCount: { th: "{n} ผู้พูด", en: "{n} speakers" },
+  turnCount: { th: "{n} ช่วง", en: "{n} turns" },
   unsaved: { th: "ยังไม่ได้บันทึก", en: "Unsaved changes" },
   saveFailed: { th: "บันทึกไม่สำเร็จ", en: "Could not save" },
 
   // --- minutes screen ---
   minutes: { th: "รายงานการประชุม", en: "Minutes" },
   contents: { th: "สารบัญ", en: "Contents" },
+  aiDraftNote: {
+    th: "สร้างจากบทถอดเสียงที่ตรวจทานแล้ว · แก้ไขได้",
+    en: "Drafted from the reviewed transcript · editable",
+  },
+  attendeeCount: { th: "{n} ผู้เข้าร่วม", en: "{n} attendees" },
   sectionSummary: { th: "สรุปการประชุม", en: "Summary" },
   sectionSummaryExecutive: { th: "สรุปผู้บริหาร", en: "Executive summary" },
   sectionSummaryStandup: { th: "ภาพรวม", en: "Overview" },
@@ -302,7 +365,15 @@ export function formatDuration(seconds: number | null | undefined): string {
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+/** `2026-11-17 14:05` in local time: the data style used in lists. */
+export function formatIsoDateTime(iso: string): string {
+  const date = new Date(iso.replace(" ", "T") + "Z");
+  if (Number.isNaN(date.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export function formatDateTime(iso: string, lang: Lang): string {

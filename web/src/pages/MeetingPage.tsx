@@ -1,14 +1,17 @@
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "../lib/api";
-import { formatDateTime, formatDuration, useI18n } from "../lib/i18n";
+import { formatDuration, formatIsoDateTime, useI18n } from "../lib/i18n";
 import { MEETING_TYPES } from "../lib/meetingType";
-import { stageKind } from "../lib/stage";
+import { stageKind, type StageKind } from "../lib/stage";
 import { useElapsed, useJobEvents } from "../lib/useJobEvents";
 import { StageBadge } from "../components/StageBadge";
 import { StageTimeline } from "../components/StageTimeline";
+import { AudioPlayer } from "../components/AudioPlayer";
+import { Icon } from "../components/Icon";
+import { BackLink, Button, ButtonLink, buttonClass, Card, Notice } from "../components/ui";
 import type { Stage } from "../types";
 
 // Must match sarai.models.CANCELLED_ERROR.
@@ -25,7 +28,7 @@ const LIVE_STAGES = new Set<Stage>([
 
 export function MeetingPage() {
   const { id = "" } = useParams();
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
 
   // Progress arrives over SSE. Polling only wakes up if the stream dies, and
@@ -76,230 +79,328 @@ export function MeetingPage() {
   const elapsed = useElapsed(meeting.data?.meeting.created_at, running);
   streamLost.current = running && status === "lost";
 
-  if (meeting.isPending) return <p className="text-ink-600">{t("loading")}</p>;
+  if (meeting.isPending) return <p className="text-small text-ink-muted">{t("loading")}</p>;
   if (meeting.isError) {
     const message =
       meeting.error instanceof ApiError ? meeting.error.message : String(meeting.error);
     return (
-      <div className="rounded-2xl border border-bad-line bg-bad-50 p-4 text-bad-600">
-        <p className="font-semibold">{t("errorTitle")}</p>
-        <p className="mt-1 text-sm">{message}</p>
-      </div>
+      <Notice tone="danger" inline>
+        <span className="font-semibold">{t("errorTitle")}</span> — {message}
+      </Notice>
     );
   }
 
   const m = meeting.data.meeting;
   const kind = stageKind(stage);
   const percent = Math.round(progress * 100);
+  const step = stepOf(stage);
+  // A straight-line estimate; only shown once there is enough progress for it
+  // to mean something.
+  const remaining =
+    running && elapsed != null && progress > 0.05 ? (elapsed / progress) * (1 - progress) : null;
+  const typeLabel = m.detect_type
+    ? "—"
+    : t(MEETING_TYPES.find((o) => o.value === m.meeting_type)?.key ?? "typeGeneral");
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <Link to="/" className="text-sm text-ink-600 hover:text-ink-900">
-          ← {t("meetings")}
-        </Link>
-        <span className="text-ink-200" aria-hidden>
-          /
-        </span>
-        <h1 className="text-xl font-bold tracking-tight">{m.title}</h1>
-        <StageBadge stage={stage} />
+    <div className="flex flex-col gap-6">
+      <BackLink to="/">{t("allMeetings")}</BackLink>
+
+      <div className="flex flex-col gap-1">
+        <p className={`text-eyebrow ${STEP_TONE[kind]}`}>{step}</p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1 className="min-w-0 text-[24px] leading-[34px] font-semibold tracking-[-0.3px] break-words sm:text-display">
+            {m.title}
+          </h1>
+          <StageBadge stage={stage} />
+        </div>
+        <p className="truncate text-data text-ink-muted">
+          {m.source_file} · {formatDuration(m.duration_sec)} · 16 kHz mono
+        </p>
       </div>
 
-      <div className="grid items-start gap-5 lg:grid-cols-[380px_1fr]">
-        <section className="rounded-2xl border border-line bg-surface p-5">
-          <div className="flex items-baseline gap-2.5">
-            <span className="text-[34px] font-bold tracking-tight tabular-nums">{percent}%</span>
-            <span className="text-[13px] text-ink-600">{detail ?? t("progress")}</span>
-          </div>
-          <div className="mt-3 mb-5 h-2 overflow-hidden rounded-full bg-sand">
-            <div
-              className={`h-full rounded-full transition-[width] duration-500 ${
-                kind === "failed" ? "bg-bad-600" : kind === "done" ? "bg-ok-600" : "bg-brand-600"
-              }`}
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-
-          <StageTimeline stage={stage} detail={detail} />
-
-          <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-line-soft pt-4 text-[12.5px] text-ink-600">
-            {running && status === "live" && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="size-1.5 rounded-full bg-ok-600" aria-hidden />
-                {t("liveLive")}
+      <div className="grid items-start gap-6 lg:grid-cols-[380px_1fr]">
+        <div className="flex flex-col gap-4">
+          <Card as="section" className="flex flex-col gap-4 p-5 sm:p-6">
+            <div className="flex flex-wrap items-baseline gap-x-2.5">
+              <span className="font-mono text-[44px] leading-[52px] font-semibold tracking-[-1.76px]">
+                {percent}%
               </span>
-            )}
-            {running && status === "connecting" && t("liveConnecting")}
-            {running && status === "lost" && <span className="text-warn-600">{t("liveLost")}</span>}
-            {stage === "queued" && <span>{t("queuedNote")}</span>}
-            {stage === "awaiting_review" && <span>{t("readyNote")}</span>}
-            {stage === "failed" && (
-              <span className="text-bad-600">{t(cancelled ? "cancelledNote" : "failedNote")}</span>
-            )}
-            {running && jobId && (
-              <span className="ml-auto flex items-center gap-2">
-                {confirmStop && !stop.isPending && (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmStop(false)}
-                    className="rounded-full border border-line bg-surface px-3 py-1 text-[12.5px] font-semibold text-ink-900 hover:border-ink-200"
+              {detail && <span className="text-data text-ink-muted">{detail}</span>}
+            </div>
+            <div className="h-2 overflow-hidden rounded-[4px] bg-surface-raised">
+              <div
+                className={`h-full rounded-[4px] transition-[width] duration-500 ${
+                  kind === "failed" ? "bg-danger" : kind === "done" ? "bg-done" : ""
+                }`}
+                style={{
+                  width: `${percent}%`,
+                  backgroundImage:
+                    kind === "failed" || kind === "done"
+                      ? undefined
+                      : "linear-gradient(90deg, #4f46e5, #06b6d4)",
+                }}
+              />
+            </div>
+            <dl className="flex gap-4">
+              <div className="min-w-0 flex-1">
+                <dt className="text-small text-ink-muted">{running ? t("elapsed") : t("created")}</dt>
+                <dd className="font-mono text-[15px] leading-5 text-ink">
+                  {running ? formatDuration(elapsed) : formatIsoDateTime(m.created_at)}
+                </dd>
+              </div>
+              {remaining != null && (
+                <div className="min-w-0 flex-1">
+                  <dt className="text-small text-ink-muted">{t("eta")}</dt>
+                  <dd className="font-mono text-[15px] leading-5 text-ink">
+                    ~{formatDuration(remaining)}
+                  </dd>
+                </div>
+              )}
+            </dl>
+            <hr className="border-line" />
+
+            <StageTimeline stage={stage} detail={detail} />
+
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-small text-ink-muted">
+              {running && status === "live" && (
+                <span className="flex flex-1 items-center gap-2">
+                  <span className="size-2 rounded-full bg-done" aria-hidden />
+                  {t("liveLive")}
+                </span>
+              )}
+              {running && status === "connecting" && (
+                <span className="flex-1">{t("liveConnecting")}</span>
+              )}
+              {running && status === "lost" && (
+                <span className="flex-1 text-live">{t("liveLost")}</span>
+              )}
+              {stage === "queued" && (
+                <span className="flex-1">
+                  {/* A failed attempt goes back to `queued`; say so, or a job that
+                      fails every time looks like it is merely waiting its turn. */}
+                  {detail?.startsWith("retrying after error")
+                    ? `${t("retryingNote")} ${detail}`
+                    : t("queuedNote")}
+                </span>
+              )}
+              {stage === "awaiting_review" && <span className="flex-1">{t("readyNote")}</span>}
+              {stage === "failed" && (
+                <span className="flex-1 text-danger">
+                  {t(cancelled ? "cancelledNote" : "failedNote")}
+                </span>
+              )}
+              {running && jobId && (
+                <span className="ml-auto flex items-center gap-1">
+                  {confirmStop && !stop.isPending && (
+                    <Button variant="ghost" size="sm" onClick={() => setConfirmStop(false)}>
+                      {t("stopJobCancel")}
+                    </Button>
+                  )}
+                  <Button
+                    variant={confirmStop ? "danger" : "ghost"}
+                    size="sm"
+                    disabled={stop.isPending}
+                    onClick={() => (confirmStop ? stop.mutate(jobId) : setConfirmStop(true))}
+                    className={confirmStop ? "" : "text-danger hover:bg-danger-soft hover:text-danger"}
                   >
-                    {t("stopJobCancel")}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  disabled={stop.isPending}
-                  onClick={() => (confirmStop ? stop.mutate(jobId) : setConfirmStop(true))}
-                  className={`rounded-full px-3 py-1 text-[12.5px] font-semibold disabled:opacity-60 ${
-                    confirmStop
-                      ? "bg-bad-600 text-white hover:bg-bad-600/90"
-                      : "border border-bad-line bg-surface text-bad-600 hover:bg-bad-50"
-                  }`}
-                >
-                  {stop.isPending
-                    ? t("stoppingJob")
-                    : confirmStop
-                      ? t("stopJobConfirm")
-                      : t("stopJob")}
-                </button>
-              </span>
+                    {stop.isPending
+                      ? t("stoppingJob")
+                      : confirmStop
+                        ? t("stopJobConfirm")
+                        : t("stopJob")}
+                  </Button>
+                </span>
+              )}
+            </div>
+
+            {stop.error && (
+              <Notice tone="danger" inline>
+                {stop.error instanceof ApiError ? stop.error.message : String(stop.error)}
+              </Notice>
             )}
-          </div>
+            {error && !cancelled && (
+              <Notice tone="danger" inline>
+                {error}
+              </Notice>
+            )}
+          </Card>
 
-          {stop.error && (
-            <p className="mt-3 rounded-xl border border-bad-line bg-bad-50 p-3 text-sm text-bad-600">
-              {stop.error instanceof ApiError ? stop.error.message : String(stop.error)}
-            </p>
+          {running && (
+            <div className="flex gap-3 rounded-lg bg-brand-soft px-5 py-4">
+              <Icon name="sparkle-20" className="text-brand-ink" />
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <p className="text-small-strong text-brand-ink">{t("nextUp")}</p>
+                <p className="text-small text-ink-muted">
+                  {t(
+                    stage === "summarizing" || stage === "rendering"
+                      ? "nextUpMinutes"
+                      : m.auto_summarize
+                        ? "nextUpAuto"
+                        : "nextUpReview",
+                  )}
+                </p>
+              </div>
+            </div>
           )}
+        </div>
 
-          {error && !cancelled && (
-            <p className="mt-3 rounded-xl border border-bad-line bg-bad-50 p-3 text-sm text-bad-600">
-              {error}
-            </p>
-          )}
-        </section>
-
-        <div className="space-y-5">
-          <section className="rounded-2xl border border-line bg-surface p-5">
-            <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-              <div>
-                <dt className="text-[12.5px] text-ink-600">{t("date")}</dt>
-                <dd className="mt-0.5 font-semibold">{m.meeting_date ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-[12.5px] text-ink-600">{t("duration")}</dt>
-                <dd className="mt-0.5 font-semibold tabular-nums">
-                  {formatDuration(m.duration_sec)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[12.5px] text-ink-600">{t("meetingType")}</dt>
-                <dd className="mt-0.5 font-semibold">
-                  {/* Until the summarize job has detected it, the stored type
-                      is only a placeholder. */}
-                  {m.detect_type
-                    ? "—"
-                    : t(MEETING_TYPES.find((o) => o.value === m.meeting_type)?.key ?? "typeGeneral")}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[12.5px] text-ink-600">
-                  {running ? t("elapsed") : t("created")}
-                </dt>
-                <dd className="mt-0.5 font-semibold tabular-nums">
-                  {running ? formatDuration(elapsed) : formatDateTime(m.created_at, lang)}
-                </dd>
-              </div>
+        <div className="flex min-w-0 flex-col gap-4">
+          <Card as="section" className="flex flex-col gap-5 p-5 sm:p-6">
+            <dl className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+              <Fact label={t("date")} value={m.meeting_date ?? "—"} />
+              <Fact label={t("duration")} value={formatDuration(m.duration_sec)} mono />
+              <Fact label={t("meetingType")} value={typeLabel} />
+              <Fact label={t("created")} value={formatIsoDateTime(m.created_at).slice(0, 10)} mono />
             </dl>
 
             {m.attendees && m.attendees.length > 0 && (
-              <div className="mt-4 border-t border-line-soft pt-4">
-                <div className="text-[12.5px] font-semibold text-ink-600">{t("attendees")}</div>
-                <div className="mt-2 flex flex-wrap gap-2">
+              <div className="flex flex-col gap-2">
+                <h2 className="text-small-strong text-ink">{t("attendees")}</h2>
+                <ul className="flex flex-wrap gap-2">
                   {m.attendees.map((a) => (
-                    <span
+                    <li
                       key={a.name}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-sand px-2.5 py-0.5 text-[12.5px] font-semibold"
+                      className="flex items-center gap-2 rounded-full border border-line bg-surface py-1 pr-3 pl-1"
                     >
-                      {a.name}
-                      {a.role && <span className="font-normal text-ink-600">· {a.role}</span>}
-                    </span>
+                      <span
+                        aria-hidden
+                        className="flex size-7 items-center justify-center rounded-[14px] bg-brand-soft text-[12.5px] font-bold text-brand-ink"
+                      >
+                        {[...a.name.trim()][0] ?? "?"}
+                      </span>
+                      <span className="text-small-strong text-ink">{a.name}</span>
+                      {a.role && <span className="text-small text-ink-muted">{a.role}</span>}
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             )}
 
             {m.glossary && m.glossary.length > 0 && (
-              <div className="mt-4 border-t border-line-soft pt-4">
-                <div className="text-[12.5px] font-semibold text-ink-600">{t("glossary")}</div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className="flex flex-col gap-2">
+                <h2 className="text-small-strong text-ink">{t("glossary")}</h2>
+                <ul className="flex flex-wrap gap-2">
                   {m.glossary.map((term) => (
-                    <span
+                    <li
                       key={term}
-                      className="rounded-full bg-brand-50 px-2.5 py-0.5 text-[13px] font-semibold text-brand-600"
+                      className="rounded-full bg-brand-soft py-[3px] pr-3 pl-2.5 text-small-strong text-brand-ink"
                     >
                       {term}
-                    </span>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             )}
-          </section>
+          </Card>
 
           {meeting.data.has_transcript && (
-            <section className="rounded-2xl border border-brand-200 bg-brand-25 p-5">
-              <h2 className="text-sm font-bold">
+            <Card
+              as="section"
+              className={`flex flex-col gap-3 p-5 sm:p-6 ${
+                meeting.data.has_summary ? "" : "border-brand shadow-glow"
+              }`}
+            >
+              <h2 className="text-[20px] leading-[30px] font-semibold tracking-[-0.1px]">
                 {meeting.data.has_summary ? t("minutes") : t("reviewTitle")}
               </h2>
-              <p className="mt-1 text-[13px] leading-relaxed text-ink-600">
+              <p className="text-small text-ink-muted">
                 {meeting.data.has_summary ? t("minutesEditableNote") : t("reviewReady")}
               </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link
-                  to={`/meetings/${m.id}/review`}
-                  className={`rounded-full px-4 py-2 text-[13.5px] font-semibold ${
-                    meeting.data.has_summary
-                      ? "border border-line bg-surface hover:border-ink-200"
-                      : "bg-brand-600 text-white hover:bg-brand-600/90"
-                  }`}
-                >
-                  {t("actionReview")} →
-                </Link>
-                {meeting.data.has_summary && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {meeting.data.has_summary ? (
                   <>
-                    <Link
-                      to={`/meetings/${m.id}/minutes`}
-                      className="rounded-full bg-ink-900 px-4 py-2 text-[13.5px] font-semibold text-surface hover:bg-ink-900/90"
-                    >
+                    <ButtonLink to={`/meetings/${m.id}/minutes`} variant="solid">
                       {t("actionOpen")}
-                    </Link>
-                    <a
-                      href={api.pdfUrl(m.id)}
-                      className="rounded-full bg-brand-600 px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-brand-600/90"
-                    >
+                    </ButtonLink>
+                    <a href={api.pdfUrl(m.id)} className={buttonClass("primary")}>
                       {t("downloadPdf")}
                     </a>
-                    <a
-                      href={api.documentUrl(m.id)}
-                      className="rounded-full border border-line bg-surface px-4 py-2 text-[13.5px] font-semibold hover:border-ink-200"
-                    >
+                    <a href={api.documentUrl(m.id)} className={buttonClass("outline")}>
                       {t("downloadDocx")}
                     </a>
+                    <ButtonLink to={`/meetings/${m.id}/review`} variant="ghost">
+                      {t("actionReview")}
+                    </ButtonLink>
                   </>
+                ) : (
+                  <ButtonLink to={`/meetings/${m.id}/review`} icon="arrow-right">
+                    {t("actionReview")}
+                  </ButtonLink>
                 )}
               </div>
-            </section>
+            </Card>
           )}
 
-          <section className="rounded-2xl border border-line bg-surface p-5">
-            <h2 className="mb-3 text-sm font-bold">{t("listen")}</h2>
-            <audio controls src={api.audioUrl(m.id)} className="w-full">
-              <track kind="captions" />
-            </audio>
-          </section>
+          {meeting.data.has_transcript && <LatestTranscript id={m.id} />}
+
+          <Card as="section" className="p-5">
+            <AudioPlayer src={api.audioUrl(m.id)} duration={m.duration_sec} />
+          </Card>
         </div>
       </div>
     </div>
   );
 }
+
+function Fact({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-md bg-surface-raised px-4 py-3">
+      <dt className="truncate text-small text-ink-muted">{label}</dt>
+      <dd
+        className={`truncate leading-[28px] text-ink ${
+          mono ? "font-mono text-[15px] font-medium" : "text-[16px] font-semibold"
+        }`}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+/** The last few turns, so the page shows what was actually heard. */
+function LatestTranscript({ id }: { id: string }) {
+  const { t } = useI18n();
+  const transcript = useQuery({ queryKey: ["transcript", id], queryFn: () => api.getTranscript(id) });
+  const turns = transcript.data?.segments.slice(-3) ?? [];
+  if (turns.length === 0) return null;
+  const names = transcript.data?.speakers ?? {};
+  return (
+    <Card as="section" className="flex flex-col gap-3 p-5 sm:p-6">
+      <div className="flex items-center gap-2.5">
+        <h2 className="flex-1 text-[20px] leading-[30px] font-semibold tracking-[-0.1px]">
+          {t("latestTranscript")}
+        </h2>
+        <ButtonLink to={`/meetings/${id}/review`} variant="outline" size="sm">
+          {t("openTranscript")}
+        </ButtonLink>
+      </div>
+      {turns.map((seg) => (
+        <div key={seg.id} className="flex flex-col gap-1 py-2 sm:flex-row sm:gap-4">
+          <div className="flex shrink-0 gap-2 text-data sm:w-28 sm:flex-col sm:gap-0">
+            <span className="truncate text-brand-ink">{names[seg.speaker] ?? seg.speaker}</span>
+            <span className="text-ink-subtle">{formatDuration(seg.start)}</span>
+          </div>
+          <p className="min-w-0 flex-1 text-[16px] leading-[28px] text-ink">{seg.text}</p>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+/** Pipeline step shown above the title. */
+function stepOf(stage: Stage | null | undefined): string {
+  if (stage === "awaiting_review") return "STEP 03 · REVIEW";
+  if (stage === "summarizing" || stage === "rendering" || stage === "done")
+    return "STEP 04 · MINUTES";
+  if (stage === "failed") return "FAILED";
+  return "STEP 02 · TRANSCRIBE";
+}
+
+const STEP_TONE: Record<StageKind, string> = {
+  queued: "text-ink-subtle",
+  running: "text-live",
+  review: "text-brand-ink",
+  done: "text-done",
+  failed: "text-danger",
+};

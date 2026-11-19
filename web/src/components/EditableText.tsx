@@ -26,9 +26,22 @@ export function EditableText({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    // Reset first: without it the box only ever grows.
-    el.style.height = "0px";
-    el.style.height = `${el.scrollHeight}px`;
+    const fit = () => {
+      // Reset first: without it the box only ever grows.
+      el.style.height = "0px";
+      el.style.height = `${el.scrollHeight}px`;
+    };
+    fit();
+    // A measurement taken before the web font arrives, or at another width,
+    // leaves blank lines under the text; measure again when either changes.
+    let alive = true;
+    void document.fonts?.ready.then(() => alive && fit());
+    const observer = new ResizeObserver(fit);
+    observer.observe(el.parentElement ?? el);
+    return () => {
+      alive = false;
+      observer.disconnect();
+    };
   }, [value]);
 
   return (
@@ -41,7 +54,7 @@ export function EditableText({
       placeholder={placeholder}
       aria-label={ariaLabel}
       rows={1}
-      className={`w-full resize-none rounded-lg border border-transparent bg-transparent px-1.5 py-0.5 outline-none hover:border-line focus:border-brand-600 focus:bg-surface ${className}`}
+      className={`w-full resize-none rounded-sm border border-transparent bg-transparent px-2 py-0.5 text-ink outline-none hover:bg-surface-raised focus:border-brand focus:bg-surface-raised ${className}`}
     />
   );
 }

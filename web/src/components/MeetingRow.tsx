@@ -1,26 +1,19 @@
 import { Link } from "react-router-dom";
 
 import type { MeetingListItem } from "../types";
-import { formatDateTime, formatDuration, useI18n } from "../lib/i18n";
-import { KIND_ICON, stageKind, type StageKind } from "../lib/stage";
+import { formatDuration, formatIsoDateTime, useI18n } from "../lib/i18n";
+import { stageKind, type StageKind } from "../lib/stage";
 import { StageBadge } from "./StageBadge";
+import { ButtonLink, IconButton, Progress, StatusTile, type ButtonVariant } from "./ui";
 
-/** The row border carries the same signal as the badge: blue asks for you,
- *  red is broken, everything else stays quiet. */
+/** The row border carries the same signal as the badge: indigo asks for you,
+ *  rose is broken, everything else stays quiet. */
 const CARD: Record<StageKind, string> = {
-  queued: "border-line",
-  running: "border-line",
-  review: "border-brand-200 shadow-[0_0_0_3px_rgba(59,91,212,.07)]",
-  done: "border-line",
-  failed: "border-bad-line",
-};
-
-const TILE: Record<StageKind, string> = {
-  queued: "bg-sand text-ink-400",
-  running: "bg-brand-50 text-brand-600",
-  review: "bg-brand-50 text-brand-600",
-  done: "bg-ok-50 text-ok-600",
-  failed: "bg-bad-50 text-bad-600",
+  queued: "border-line shadow-card hover:shadow-pop",
+  running: "border-line shadow-card hover:shadow-pop",
+  review: "border-brand shadow-glow",
+  done: "border-line shadow-card hover:shadow-pop",
+  failed: "border-danger-line shadow-card hover:shadow-pop",
 };
 
 export function MeetingRow({
@@ -30,10 +23,9 @@ export function MeetingRow({
   item: MeetingListItem;
   onDelete: () => void;
 }) {
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const m = item.meeting;
   const kind = stageKind(item.stage);
-  const percent = Math.round((item.progress ?? 0) * 100);
   // The row's action goes where the work is: the review editor when a
   // transcript is waiting, the minutes when they exist.
   const href =
@@ -43,113 +35,65 @@ export function MeetingRow({
         ? `/meetings/${m.id}/minutes`
         : `/meetings/${m.id}`;
 
-  const action =
+  const action: { label: string; short: string; variant: ButtonVariant } =
     kind === "review"
-      ? {
-          label: `${t("actionReview")} →`,
-          short: t("actionReviewShort"),
-          className: "bg-brand-600 text-white hover:bg-brand-600/90",
-        }
+      ? { label: t("actionReview"), short: t("actionReviewShort"), variant: "primary" }
       : kind === "done"
-        ? {
-            label: t("actionOpen"),
-            short: t("actionOpenShort"),
-            className: "bg-ink-900 text-surface hover:bg-ink-900/90",
-          }
+        ? { label: t("actionOpen"), short: t("actionOpenShort"), variant: "solid" }
         : kind === "failed"
-          ? {
-              label: t("actionDetails"),
-              short: t("actionDetailsShort"),
-              className: "border border-line bg-surface hover:border-ink-200",
-            }
-          : {
-              label: t("actionWatch"),
-              short: t("actionWatchShort"),
-              className: "border border-line bg-surface hover:border-ink-200",
-            };
+          ? { label: t("actionDetails"), short: t("actionDetailsShort"), variant: "outline" }
+          : { label: t("actionWatch"), short: t("actionWatchShort"), variant: "outline" };
 
   return (
     <li
-      className={`flex items-center gap-2.5 rounded-2xl border bg-surface p-3 sm:gap-4 sm:px-[18px] sm:py-4 ${CARD[kind]}`}
+      className={`flex items-center gap-3 rounded-lg border bg-surface px-3 py-3 transition-shadow sm:min-h-[76px] sm:gap-4 sm:px-5 sm:py-4 ${CARD[kind]}`}
     >
-      <span
-        className={`flex size-9 flex-none items-center justify-center rounded-lg text-sm sm:size-11 sm:rounded-xl sm:text-[17px] ${TILE[kind]}`}
-        aria-hidden
-      >
-        {KIND_ICON[kind]}
+      <span className="hidden sm:block">
+        <StatusTile kind={kind} />
+      </span>
+      <span className="sm:hidden">
+        <StatusTile kind={kind} size="sm" />
       </span>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-w-0 items-center gap-2.5">
           <Link
             to={`/meetings/${m.id}`}
-            className="truncate text-[15px] font-semibold hover:text-brand-600 sm:text-base"
+            className="truncate text-[15.5px] leading-[26px] font-semibold text-ink hover:text-brand-ink"
           >
             {m.title}
           </Link>
-          {/* The badge repeats what the tile colour already says, so on a phone
-              it is the first thing to go. */}
-          <span className="hidden sm:inline">
+          {/* The badge repeats what the tile already says, so on a phone it is
+              the first thing to go. */}
+          <span className="hidden sm:inline-flex">
             <StageBadge stage={item.stage} />
           </span>
         </div>
-        <p className="truncate text-[12.5px] text-ink-600">
-          {m.meeting_date ?? formatDateTime(m.created_at, lang)} · {formatDuration(m.duration_sec)}
+        <p className="truncate text-data text-ink-muted">
+          {m.meeting_date ?? formatIsoDateTime(m.created_at)} · {formatDuration(m.duration_sec)}
           <span className="hidden sm:inline"> · {m.source_file}</span>
         </p>
 
         {kind === "running" && (
-          <div className="mt-1.5 flex items-center gap-2.5">
-            <span className="h-1 max-w-[420px] flex-1 overflow-hidden rounded-full bg-sand sm:h-1.5">
-              <span
-                className="block h-full rounded-full bg-brand-600 transition-[width] duration-500"
-                style={{ width: `${percent}%` }}
-              />
-            </span>
-            <span className="text-xs tabular-nums text-ink-600">{percent}%</span>
-          </div>
+          <Progress value={item.progress ?? 0} className="max-w-[420px] pt-1.5" />
         )}
 
-        {kind === "failed" && (
-          <p className="mt-1 truncate text-[12.5px] text-bad-600">{t("failedNote")}</p>
-        )}
+        {kind === "failed" && <p className="truncate text-small text-danger">{t("failedNote")}</p>}
       </div>
 
-      <Link
+      <ButtonLink
         to={href}
-        className={`flex-none rounded-full px-3 py-1.5 text-[12.5px] font-semibold sm:px-4 sm:py-2 sm:text-[13.5px] ${action.className}`}
+        variant={action.variant}
+        size="sm"
+        icon={kind === "review" ? "arrow-right" : undefined}
       >
         <span className="sm:hidden">{action.short}</span>
         <span className="hidden sm:inline">{action.label}</span>
-      </Link>
+      </ButtonLink>
 
-      {/* Deleting is confirmed by the caller, so it does not need a menu in
-          front of it as a second speed bump. */}
-      <button
-        type="button"
-        onClick={onDelete}
-        aria-label={`${t("delete")} ${m.title}`}
-        title={t("delete")}
-        className="flex size-8 flex-none items-center justify-center rounded-full text-bad-600 hover:bg-bad-50"
-      >
-        {/* Inline so the icon inherits the button's colour and the project
-            stays free of an icon dependency for one glyph. */}
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="size-[18px]"
-          aria-hidden
-        >
-          <path d="M4 7h16" />
-          <path d="M10 4h4a1 1 0 0 1 1 1v2H9V5a1 1 0 0 1 1-1Z" />
-          <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
-          <path d="M10 11v6M14 11v6" />
-        </svg>
-      </button>
+      {/* Deleting is confirmed by the caller, so it needs no menu in front of
+          it as a second speed bump. */}
+      <IconButton icon="trash" label={`${t("delete")} ${m.title}`} onClick={onDelete} />
     </li>
   );
 }

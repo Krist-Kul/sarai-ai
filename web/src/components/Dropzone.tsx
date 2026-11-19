@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useI18n } from "../lib/i18n";
+import { formatDuration, useI18n } from "../lib/i18n";
+import { Icon } from "./Icon";
+import { Button } from "./ui";
 
 // Must match sarai.config.ALLOWED_UPLOAD_EXTENSIONS.
 const ACCEPT =
@@ -86,6 +88,8 @@ export function Dropzone({
     };
   }, []);
 
+  const duration = useMediaDuration(file);
+
   return (
     <div>
       <div
@@ -95,44 +99,57 @@ export function Dropzone({
         }}
         role="button"
         tabIndex={0}
-        className={`cursor-pointer rounded-2xl border-2 border-dashed transition ${
-          over ? "border-brand-600 bg-brand-50" : "border-brand-200 bg-brand-25 hover:border-brand-600"
-        } ${file ? "p-5" : "px-6 py-10"}`}
+        className={`flex cursor-pointer items-center gap-4 rounded-[24px] p-5 transition-[border-color,background-color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+          over
+            ? "border-[1.5px] border-solid border-brand bg-brand-soft shadow-glow"
+            : "border-[1.5px] border-dashed border-line-control bg-surface hover:border-brand"
+        } ${file ? "min-h-[92px] flex-wrap sm:flex-nowrap" : "min-h-[132px] flex-col justify-center text-center"}`}
       >
         {file ? (
-          <div className="flex items-center gap-4">
+          <>
             <span
-              className="flex size-13 flex-none items-center justify-center rounded-2xl bg-brand-50 text-xl text-brand-600"
+              className="flex size-13 flex-none items-center justify-center rounded-md bg-brand text-on-brand"
               aria-hidden
             >
-              ♪
+              <Icon name="file-audio-24" />
             </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[15px] font-semibold">{file.name}</p>
-              <p className="text-[12.5px] text-ink-600">
-                {formatBytes(file.size)} · {t("fileReady")}
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <p className="truncate text-[16px] leading-[28px] font-semibold text-ink">
+                {file.name}
               </p>
-              <div className="mt-2 h-1.5 max-w-[420px] overflow-hidden rounded-full bg-sand">
-                <span className="block h-full w-full rounded-full bg-ok-600" />
-              </div>
+              <p className="truncate text-data text-ink-muted">
+                {formatBytes(file.size)}
+                {duration != null && ` · ${formatDuration(duration)}`} · {t("fileReady")}
+              </p>
+              <span className="h-1 w-full max-w-[280px] rounded-[2px] bg-done" aria-hidden />
             </div>
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={(e) => {
                 e.stopPropagation();
                 choose(null);
                 if (inputRef.current) inputRef.current.value = "";
               }}
-              className="flex-none rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink-600 hover:text-ink-900"
             >
               {t("replaceFile")}
-            </button>
-          </div>
+            </Button>
+          </>
         ) : (
-          <div className="text-center">
-            <p className="font-semibold">{t("dropzone")}</p>
-            <p className="mt-1 text-sm text-ink-600">{t("dropzoneHint")}</p>
-          </div>
+          <>
+            <span
+              className={`flex size-13 items-center justify-center rounded-md ${
+                over ? "bg-brand text-on-brand" : "bg-brand-soft text-brand"
+              }`}
+              aria-hidden
+            >
+              <Icon name="upload-20" />
+            </span>
+            <div className="flex flex-col gap-1">
+              <p className="text-[16px] leading-[28px] font-semibold text-ink">{t("dropzone")}</p>
+              <p className="text-small text-ink-muted">{t("dropzoneHint")}</p>
+            </div>
+          </>
         )}
         <input
           ref={inputRef}
@@ -146,13 +163,32 @@ export function Dropzone({
         />
       </div>
       {rejected && (
-        <p role="alert" className="mt-2.5 px-0.5 text-[12.5px] font-semibold text-bad-600">
+        <p role="alert" className="mt-2.5 px-0.5 text-small-strong text-danger">
           {t("unsupportedFile")}
         </p>
       )}
-      <p className="mt-2.5 px-0.5 text-[12.5px] text-ink-600">
-        <span aria-hidden>🔒</span> {t("privacyNote")}
-      </p>
     </div>
   );
+}
+
+/** Length of the picked recording, read by the browser's own decoder. Null
+ *  until known, and for containers the browser cannot open (.wma, .amr). */
+function useMediaDuration(file: File | null): number | null {
+  const [duration, setDuration] = useState<number | null>(null);
+  useEffect(() => {
+    setDuration(null);
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const media = document.createElement(file.type.startsWith("video") ? "video" : "audio");
+    media.preload = "metadata";
+    media.onloadedmetadata = () => {
+      if (Number.isFinite(media.duration)) setDuration(media.duration);
+    };
+    media.src = url;
+    return () => {
+      media.removeAttribute("src");
+      URL.revokeObjectURL(url);
+    };
+  }, [file]);
+  return duration;
 }

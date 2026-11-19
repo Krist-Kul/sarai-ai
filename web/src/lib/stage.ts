@@ -38,18 +38,9 @@ export const STAGE_LABEL: Record<Stage, StringKey> = {
 
 /** Badge fill + text. `queued` stays neutral: nothing is happening yet. */
 export const KIND_TONE: Record<StageKind, string> = {
-  queued: "bg-sand text-ink-600",
-  running: "bg-warn-100 text-warn-600",
-  review: "bg-brand-50 text-brand-600",
-  done: "bg-ok-50 text-ok-600",
-  failed: "bg-bad-50 text-bad-600",
-};
-
-/** Leading tile on a meeting row. */
-export const KIND_ICON: Record<StageKind, string> = {
-  queued: "◔",
-  running: "◷",
-  review: "✎",
-  done: "✓",
-  failed: "!",
+  queued: "bg-surface-raised text-ink-muted",
+  running: "bg-live-soft text-live",
+  review: "bg-brand-soft text-brand-ink",
+  done: "bg-done-soft text-done",
+  failed: "bg-danger-soft text-danger",
 };

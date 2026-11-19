@@ -1,5 +1,6 @@
 import type { Stage } from "../types";
 import { useI18n, type StringKey } from "../lib/i18n";
+import { Icon } from "./Icon";
 
 /** The transcribe pipeline as the user sees it. `queued` sits before step 0. */
 const STEPS: { stage: Stage; label: StringKey; hint: StringKey }[] = [
@@ -15,37 +16,41 @@ const ORDER: Partial<Record<Stage, number>> = {
   diarizing: 1,
   transcribing: 2,
   awaiting_review: 3,
-  summarizing: 3,
-  rendering: 3,
-  done: 3,
+  // Past review: every transcribe step is behind us.
+  summarizing: 4,
+  rendering: 4,
+  done: 4,
 };
 
-type State = "done" | "active" | "failed" | "pending";
+type State = "done" | "active" | "review" | "failed" | "pending";
 
 function stateOf(index: number, current: number, failed: boolean): State {
   if (index < current) return "done";
   if (index > current) return "pending";
-  return failed ? "failed" : index === STEPS.length - 1 ? "done" : "active";
+  if (failed) return "failed";
+  return index === STEPS.length - 1 ? "review" : "active";
 }
 
 const DOT: Record<State, string> = {
-  done: "border-ok-600 bg-ok-600 text-white",
-  active: "animate-pulse border-brand-600 bg-surface text-brand-600",
-  failed: "border-bad-600 bg-bad-600 text-white",
-  pending: "border-line bg-surface text-ink-400",
+  done: "border-done bg-done text-surface",
+  active: "border-live bg-surface text-live shadow-[0_0_0_4px_color-mix(in_srgb,var(--live)_16%,transparent)]",
+  review: "border-brand bg-brand text-on-brand shadow-glow",
+  failed: "border-danger bg-danger text-surface",
+  pending: "border-line-control bg-surface text-ink-subtle",
 };
 
-const TEXT: Record<State, string> = {
-  done: "font-semibold text-ink-900",
-  active: "font-bold text-brand-600",
-  failed: "font-bold text-bad-600",
-  pending: "text-ink-400",
+const LABEL: Record<State, string> = {
+  done: "text-ink",
+  active: "text-live",
+  review: "text-brand-ink",
+  failed: "text-danger",
+  pending: "text-ink-subtle",
 };
 
 /**
- * Vertical timeline. `detail` is the live line from the job stream ("120 of 380
- * turns") and belongs to whichever step is running; the others fall back to a
- * fixed description of what that step does.
+ * Vertical pipeline. `detail` is the live line from the job stream ("120 / 380
+ * turns") and belongs to whichever step is running; the others show a fixed
+ * description of what that step does.
  */
 export function StageTimeline({
   stage,
@@ -65,26 +70,37 @@ export function StageTimeline({
       {STEPS.map((step, i) => {
         const state = stateOf(i, current, failed);
         const last = i === STEPS.length - 1;
+        const live = state === "active" && detail;
         return (
           <li key={step.stage} className="flex gap-3.5">
-            <div className="flex flex-none flex-col items-center">
+            <div className="flex flex-none flex-col items-center gap-1">
               <span
-                className={`flex size-[22px] items-center justify-center rounded-full border-2 text-[11px] font-bold ${DOT[state]}`}
+                className={`flex size-6 items-center justify-center rounded-[12px] border-2 font-mono text-[11px] font-semibold ${DOT[state]}`}
                 aria-hidden
               >
-                {state === "done" ? "✓" : state === "failed" ? "!" : i + 1}
+                {state === "done" ? (
+                  <Icon name="check-14" />
+                ) : state === "review" ? (
+                  <Icon name="pencil-14" />
+                ) : state === "failed" ? (
+                  "!"
+                ) : (
+                  String(i + 1).padStart(2, "0")
+                )}
               </span>
               {!last && (
                 <span
-                  className={`w-0.5 flex-1 ${state === "done" ? "bg-ok-600" : "bg-line"}`}
+                  className={`min-h-4 w-0.5 flex-1 rounded-[1px] ${
+                    state === "done" ? "bg-done" : "bg-line"
+                  }`}
                   aria-hidden
                 />
               )}
             </div>
-            <div className={last ? "" : "pb-4"}>
-              <div className={`text-sm ${TEXT[state]}`}>{t(step.label)}</div>
-              <div className="text-[12.5px] text-ink-400">
-                {state === "active" && detail ? detail : t(step.hint)}
+            <div className={`min-w-0 flex-1 ${last ? "" : "pb-4"}`}>
+              <div className={`text-label ${LABEL[state]}`}>{t(step.label)}</div>
+              <div className={live ? "text-data text-ink-muted" : "text-small text-ink-subtle"}>
+                {live ? detail : t(step.hint)}
               </div>
             </div>
           </li>

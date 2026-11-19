@@ -4,15 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sarai AI</title>
-    <!-- Sarabun carries Thai and Latin, so the UI needs one family. It falls
-         back to system fonts when the machine is offline, which a self-hosted
-         install may well be. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Anuphan carries Thai and Latin; Geist Mono sets data (times, counts,
+         file names); Plus Jakarta Sans is only the wordmark. All fall back to
+         system fonts when the machine is offline, which a self-hosted install
+         may well be. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@700&display=swap"
       rel="stylesheet"
     />
+    <meta name="color-scheme" content="light dark" />
   </head>
   <body>
     <div id="root"></div>
