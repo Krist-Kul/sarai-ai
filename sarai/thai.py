@@ -70,6 +70,25 @@ def char_len(text: str) -> int:
     return len(text)
 
 
+_THAI_RUN = re.compile(r"[\u0e00-\u0e7f]{2,}")
+ZWSP = "\u200b"
+
+
+def soft_wrap(text: str) -> str:
+    """Insert zero-width spaces between Thai words so a renderer can wrap them.
+
+    Thai has no spaces, so a layout engine without a Thai dictionary sees a
+    whole Thai sentence as one unbreakable word. In a table that word sets the
+    column's minimum width and pushes the table off the page. Returns `text`
+    unchanged when pythainlp is missing.
+    """
+    try:
+        from pythainlp.tokenize import word_tokenize
+    except ImportError:
+        return text
+    return _THAI_RUN.sub(lambda m: ZWSP.join(t for t in word_tokenize(m.group(0)) if t), text)
+
+
 def truncate(text: str, limit: int, suffix: str = "…") -> str:
     """Cut to `limit` characters, at a word boundary when pythainlp is available.
 

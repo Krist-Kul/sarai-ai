@@ -168,7 +168,7 @@ class HealthResponse(BaseModel):
     db: bool
     worker_heartbeat: str | None = None
     worker_alive: bool = False
-    llm: str  # "deepseek" | "anthropic" | "disabled"
+    llm: str  # "deepseek" | "anthropic" | "gemini" | "disabled"
 
 
 class ErrorResponse(BaseModel):

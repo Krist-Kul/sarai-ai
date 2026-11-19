@@ -3802,6 +3802,11 @@ dependencies = [
     { name = "weasyprint" },
 ]
 
+[package.optional-dependencies]
+suplime = [
+    { name = "suplime" },
+]
+
 [package.dev-dependencies]
 api = [
     { name = "aiofiles" },
@@ -3842,8 +3847,10 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.3" },
     { name = "python-docx", specifier = ">=1.1" },
+    { name = "suplime", marker = "extra == 'suplime'", specifier = ">=0.2" },
     { name = "weasyprint", specifier = ">=62" },
 ]
+provides-extras = ["suplime"]
 
 [package.metadata.requires-dev]
 api = [
@@ -4186,6 +4193,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b5/b4/205b0d5241d934e8add0c38aa924c4f9fb7330834ff11e5444db964ec3f9/starlette-1.6.0.tar.gz", hash = "sha256:d4e3ac5e546444960c710297a3c9fc3f7ebae1b7e963f3d36173b49da535be9b", size = 2716969, upload-time = "2026-08-08T18:27:57.512Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c8/cb/6a6a47d5b464bd08695d254f3da6e7986cc70c9fa5d778eda57538edfe56/starlette-1.6.0-py3-none-any.whl", hash = "sha256:a86dd39d14bb45f85a3d18525215a9ef0cfd1f192ac793220e72598c90335f0c", size = 75969, upload-time = "2026-08-08T18:27:56.196Z" },
+]
+
+[[package]]
+name = "suplime"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyannote-audio" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d1/79/043a988c63d1c8c86a6fe1a29a7e7e60f7f36efa3edb86ac28636d15fd62/suplime-0.2.0.tar.gz", hash = "sha256:609b1b9f5578d50b2c2635e531a2bc3eb10385823538a4b9614071913fb1ac3d", size = 46844, upload-time = "2026-09-09T17:52:39.629Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b6/bf/4b24edcd2587bae1b41409fd98a1e6412cf5abbf71e7cd951d83401d6b80/suplime-0.2.0-py3-none-any.whl", hash = "sha256:b2fa53e051cdd6aaad66f441bf593dc4d325c75e67d5a531d60e34273cf92439", size = 35023, upload-time = "2026-09-09T17:52:38.096Z" },
 ]
 
 [[package]]

@@ -4,7 +4,7 @@ SHELL := /bin/bash
 UV ?= uv
 NPM ?= npm
 # The API port. `make web` points the Vite proxy at it, so the two never disagree.
-API_PORT ?= 8001
+API_PORT ?= 8000
 
 .PHONY: help
 help: ## Show this help
@@ -21,6 +21,10 @@ install: ## Install API + dev deps and the frontend (no torch)
 .PHONY: install-worker
 install-worker: ## Add the worker deps (torch, transformers, pyannote) -- several GB
 	$(UV) sync --group api --group worker --group dev
+
+.PHONY: install-suplime
+install-suplime: ## Worker deps + the optional SUPlime-L diarizer (CC BY-NC 4.0: non-commercial)
+	$(UV) sync --group api --group worker --group dev --extra suplime
 
 # --- run -------------------------------------------------------------------
 

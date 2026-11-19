@@ -11,6 +11,7 @@ stay importable -- and testable -- without torch.
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ from typing import Any
 import numpy as np
 
 from sarai.config import get_settings
+from sarai.worker.stages import StageFailed
 
 log = logging.getLogger("sarai.worker.diarize")
 
@@ -41,6 +43,56 @@ GATE_HELP = (
     "Note: pyannote 4.x redirects the older speaker-diarization-3.1 name to "
     "community-1, so a 403 can name a repo you never configured."
 )
+
+# SUPlime (https://huggingface.co/rewayai/suplime-large) is an opt-in
+# alternative. Its pipeline class lives in the `suplime` package, its weights
+# are CC BY-NC 4.0, and its repo is gated with automatic approval: anonymous
+# downloads get a 401, so it needs HF_TOKEN too, but not the pyannote gates.
+SUPLIME_PREFIX = "rewayai/suplime"
+SUPLIME_INSTALL_HELP = (
+    "DIARIZATION_MODEL={model} needs the optional `suplime` package, which is not "
+    "installed. Install it with `make install-suplime` (or `uv sync --group worker "
+    "--extra suplime`), or set DIARIZATION_MODEL back to "
+    "pyannote/speaker-diarization-community-1."
+)
+SUPLIME_GATE_HELP = (
+    "SUPlime weights need HF_TOKEN. Open https://huggingface.co/{model} with the "
+    "account that issued HF_TOKEN and accept the terms (approval is automatic)."
+)
+
+
+class DiarizationSetupError(StageFailed):
+    """The selected model cannot run with what is installed.
+
+    Never degraded to single-speaker mode: whoever set DIARIZATION_MODEL to a
+    non-default model chose it on purpose, and a silent SPEAKER_00 transcript
+    would hide that their choice is not in effect. A StageFailed, so a job that
+    hits it fails once instead of retrying.
+    """
+
+
+def is_suplime(model: str) -> bool:
+    return model.lower().startswith(SUPLIME_PREFIX)
+
+
+def license_warning(model: str) -> str | None:
+    """One line for the worker log when the model's weights forbid commercial use."""
+    if is_suplime(model):
+        return (
+            f"DIARIZATION_MODEL={model} has CC BY-NC 4.0 weights: non-commercial use only. "
+            "Do not run this worker for commercial work."
+        )
+    return None
+
+
+def gate_help(model: str) -> str:
+    return SUPLIME_GATE_HELP.format(model=model) if is_suplime(model) else GATE_HELP
+
+
+def require_model_package(model: str) -> None:
+    """Fail loudly when the selected pipeline's code is not installed."""
+    if is_suplime(model) and importlib.util.find_spec("suplime") is None:
+        raise DiarizationSetupError(SUPLIME_INSTALL_HELP.format(model=model))
 
 
 @dataclass(frozen=True)
@@ -80,9 +132,14 @@ def load_pipeline() -> Any | None:
     when the gated weights cannot be fetched. Transcription is the valuable part
     of this pipeline; losing speaker labels must not cost the user their
     transcript, and the review screen lets them assign speakers by hand.
+
+    Raises DiarizationSetupError instead when the selected model's code is not
+    installed: that is a configuration mistake, not a missing download.
     """
     global _pipeline, _pipeline_failed
     settings = get_settings()
+    model = settings.diarization_model
+    require_model_package(model)
     if not settings.diarization_enabled or _pipeline_failed:
         return None
     if _pipeline is not None:
@@ -90,20 +147,22 @@ def load_pipeline() -> Any | None:
 
     import torch
     from pyannote.audio import Pipeline
+    from pyannote.audio.utils.dependencies import MissingDependency
 
-    log.info("loading diarization model %s", settings.diarization_model)
+    log.info("loading diarization model %s", model)
     try:
         # pyannote 3.1 renamed this kwarg from use_auth_token to token.
-        pipeline = Pipeline.from_pretrained(settings.diarization_model, token=settings.hf_token)
-    except Exception as exc:  # noqa: BLE001 - any load failure degrades the same way
+        pipeline = Pipeline.from_pretrained(model, token=settings.hf_token)
+    except MissingDependency as exc:
+        # The model's config names a package that is absent or too old.
+        raise DiarizationSetupError(f"cannot load {model}: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001 - any other load failure degrades the same way
         _pipeline_failed = True
-        log.error("could not load %s: %s\n%s", settings.diarization_model, exc, GATE_HELP)
+        log.error("could not load %s: %s\n%s", model, exc, gate_help(model))
         return None
     if pipeline is None:
         _pipeline_failed = True
-        log.error(
-            "pyannote returned no pipeline for %s.\n%s", settings.diarization_model, GATE_HELP
-        )
+        log.error("pyannote returned no pipeline for %s.\n%s", model, gate_help(model))
         return None
     device = diarization_device()
     pipeline.to(torch.device(device))
@@ -112,24 +171,69 @@ def load_pipeline() -> Any | None:
     return _pipeline
 
 
-def _run_pipeline(pipeline: Any, audio: Any) -> Any:
-    """Run on the configured device; if that is mps and it fails, finish on cpu.
+def _device_type(pipeline: Any) -> str | None:
+    return getattr(getattr(pipeline, "device", None), "type", None)
 
-    pyannote 4 runs cleanly on mps today, but an op missing from some future
+
+def _is_cuda_oom(pipeline: Any, exc: BaseException) -> bool:
+    # torch.OutOfMemoryError is a RuntimeError; matching the message also covers
+    # the cuDNN/cuBLAS allocation failures that surface as plain RuntimeErrors.
+    return _device_type(pipeline) == "cuda" and "out of memory" in str(exc).lower()
+
+
+def _shrink_batches(pipeline: Any) -> bool:
+    """Quarter the pipeline's batch sizes in place. False once both are already 1.
+
+    SUPlime's config asks for batches of 32 through WavLM-Large, which needs
+    ~8.5 GB of VRAM on its own; next to a resident Whisper large-v3 that does not
+    fit on a 12 GB card. The shrink persists for the worker's life so later jobs
+    do not pay for the same OOM again.
+    """
+    shrunk = False
+    for name in ("embedding_batch_size", "segmentation_batch_size"):
+        size = getattr(pipeline, name, None)
+        if isinstance(size, int) and size > 1:
+            setattr(pipeline, name, max(1, size // 4))
+            shrunk = True
+    return shrunk
+
+
+def _run_pipeline(pipeline: Any, audio: Any) -> Any:
+    """Run on the configured device, recovering from the two known device failures.
+
+    CUDA out of memory: free the cache, shrink the batch sizes and run again,
+    down to batches of 1. Without this the OOM is a retryable job error, so the
+    job bounces back to `queued` -- where the UI says it is waiting for a free
+    worker -- and fails the same way on every attempt.
+
+    mps: pyannote 4 runs cleanly on mps today, but an op missing from some future
     torch/pyannote pair would otherwise fail every job on this machine. Moving
     to cpu is permanent for the worker's life: a device that failed once will
     fail again, and the retry costs a whole pass each time.
     """
-    try:
-        return pipeline(audio)
-    except (RuntimeError, NotImplementedError) as exc:
-        if getattr(getattr(pipeline, "device", None), "type", None) != "mps":
-            raise
+    while True:
+        try:
+            return pipeline(audio)
+        except (RuntimeError, NotImplementedError) as exc:
+            if not (_is_cuda_oom(pipeline, exc) and _shrink_batches(pipeline)):
+                if _device_type(pipeline) != "mps":
+                    raise
+                import torch
+
+                log.warning("diarization failed on mps (%s); moving to cpu and retrying", exc)
+                pipeline.to(torch.device("cpu"))
+                return pipeline(audio)
+            log.warning(
+                "diarization ran out of GPU memory; retrying with batch sizes "
+                "embedding=%s segmentation=%s",
+                getattr(pipeline, "embedding_batch_size", "?"),
+                getattr(pipeline, "segmentation_batch_size", "?"),
+            )
+        # Outside the except block: the traceback no longer pins the failed
+        # batch's tensors, so the cache can actually be released.
         import torch
 
-        log.warning("diarization failed on mps (%s); moving to cpu and retrying", exc)
-        pipeline.to(torch.device("cpu"))
-        return pipeline(audio)
+        torch.cuda.empty_cache()
 
 
 # ---------------------------------------------------------------------------

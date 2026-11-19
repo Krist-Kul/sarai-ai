@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-Provider = Literal["deepseek", "anthropic"]
+Provider = Literal["deepseek", "anthropic", "gemini"]
 Device = Literal["auto", "cuda", "mps", "cpu"]
 AsrBackend = Literal["auto", "transformers", "mlx"]
 
@@ -76,13 +76,18 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     anthropic_base_url: str = "https://api.anthropic.com"
     anthropic_model: str = "claude-sonnet-5"
+    gemini_api_key: str | None = None
+    gemini_base_url: str = "https://generativelanguage.googleapis.com"
+    gemini_model: str = "gemini-3.8-flash"
     llm_single_call_chars: int = 40_000
     llm_chunk_chars: int = 30_000
     llm_chunk_overlap_segments: int = 2
     llm_timeout_seconds: float = 300.0
 
     # Empty strings in a .env should read as "unset", not as a real key.
-    @field_validator("hf_token", "deepseek_api_key", "anthropic_api_key", mode="before")
+    @field_validator(
+        "hf_token", "deepseek_api_key", "anthropic_api_key", "gemini_api_key", mode="before"
+    )
     @classmethod
     def _blank_to_none(cls, v: object) -> object:
         if isinstance(v, str) and not v.strip():

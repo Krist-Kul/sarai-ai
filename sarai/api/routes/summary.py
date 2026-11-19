@@ -108,6 +108,12 @@ async def update_summary(
     return _require_summary(conn, meeting)
 
 
+def summary_filename(title: str, ext: str) -> str:
+    """`weekly sync` -> `(Summary) weekly sync.pdf`, so a downloaded summary is
+    never mistaken for the recording it came from."""
+    return f"(Summary) {title}.{ext}"
+
+
 @router.get("/{meeting_id}/document")
 def get_document(meeting: RequiredMeeting, conn: Db) -> FileResponse:
     path = db.get_summary_docx_path(conn, meeting.id)
@@ -117,7 +123,9 @@ def get_document(meeting: RequiredMeeting, conn: Db) -> FileResponse:
     if not file.is_file():
         raise HTTPException(404, "The document is missing from disk; regenerate the minutes")
     # Thai filenames survive the trip: Starlette encodes them per RFC 5987.
-    return FileResponse(file, media_type=DOCX_MEDIA_TYPE, filename=f"{meeting.title}.docx")
+    return FileResponse(
+        file, media_type=DOCX_MEDIA_TYPE, filename=summary_filename(meeting.title, "docx")
+    )
 
 
 @router.get("/{meeting_id}/pdf")
@@ -127,4 +135,6 @@ def get_pdf(meeting: RequiredMeeting, conn: Db) -> FileResponse:
     file = storage.pdf_path(meeting.id)
     if not file.is_file():
         raise HTTPException(404, "The PDF is missing from disk; regenerate the minutes")
-    return FileResponse(file, media_type="application/pdf", filename=f"{meeting.title}.pdf")
+    return FileResponse(
+        file, media_type="application/pdf", filename=summary_filename(meeting.title, "pdf")
+    )

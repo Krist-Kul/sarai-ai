@@ -258,7 +258,7 @@ class Summarizer(Protocol):
     async def summarize(self, inp: SummarizeInput) -> MinutesJSON: ...
 ```
 
-Two implementations, selected by `LLM_PROVIDER`: `deepseek` (OpenAI-compatible endpoint) and `anthropic`. Both are text-only — audio never reaches them.
+Three implementations, selected by `LLM_PROVIDER`: `deepseek` (OpenAI-compatible endpoint), `anthropic`, and `gemini` (Gemini API `generateContent`). All are text-only — audio never reaches them.
 
 **Validation loop.** Parse the response with `MinutesJSON.model_validate_json()`. On `ValidationError`, retry once with the Pydantic error message appended to the prompt — models correct their own schema violations reliably when shown the error. Fail the job with a readable message after the second failure. Never return partial data silently.
 

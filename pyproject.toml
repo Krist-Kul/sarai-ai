@@ -12,6 +12,13 @@ dependencies = [
     "weasyprint>=62",
 ]
 
+# Opt-in extras. `suplime` adds the SUPlime-L diarization pipeline
+# (rewayai/suplime-large). Its weights are CC BY-NC 4.0 -- non-commercial only --
+# so it is never a default; select it with DIARIZATION_MODEL. Install with
+# `make install-suplime` (or add `--extra suplime` to the worker sync).
+[project.optional-dependencies]
+suplime = ["suplime>=0.2"]
+
 # torch lives ONLY in the `worker` group. The API process must never be able to
 # import it -- see tests/test_no_torch_in_api.py
 [dependency-groups]

@@ -1,6 +1,6 @@
 """Chat clients.
 
-Two providers, one method. The summarizer only ever needs "here is a system
+Three providers, one method. The summarizer only ever needs "here is a system
 prompt and a user message, give me back text", so that is the whole interface --
 map-reduce, validation and retries live in `sarai.llm.summarize` and work
 identically against either provider.
@@ -119,9 +119,79 @@ class AnthropicChat:
         return text
 
 
+class GeminiChat:
+    """Google Gemini API (generativelanguage.googleapis.com), plain REST.
+
+    Called over httpx rather than the google-genai SDK: the request is one
+    POST, and keeping it SDK-free means the API process gains no dependency.
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        if not settings.gemini_api_key:
+            raise LLMError("GEMINI_API_KEY is not set")
+        self.model = settings.gemini_model
+        self._key = settings.gemini_api_key
+        self._url = (
+            f"{settings.gemini_base_url.rstrip('/')}/v1beta/models/{self.model}:generateContent"
+        )
+        self._timeout = settings.llm_timeout_seconds
+
+    async def complete(self, system: str, user: str) -> str:
+        payload = {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "generationConfig": {
+                # On thinking models this budget includes thinking tokens.
+                "maxOutputTokens": MAX_TOKENS,
+                # JSON mode. The response is still validated against
+                # MinutesJSON -- valid JSON is not a valid schema.
+                "responseMimeType": "application/json",
+            },
+        }
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            try:
+                res = await client.post(
+                    self._url,
+                    # Header, not ?key=, so the key never lands in a logged URL.
+                    headers={"x-goog-api-key": self._key},
+                    json=payload,
+                )
+            except httpx.HTTPError as exc:
+                raise LLMError(f"Could not reach Gemini: {exc}") from exc
+
+        if res.status_code != 200:
+            raise LLMError(f"Gemini returned {res.status_code}: {res.text[:300]}")
+        try:
+            body = res.json()
+        except ValueError as exc:
+            raise LLMError(f"Gemini returned an unexpected body: {res.text[:300]}") from exc
+
+        # A blocked prompt is a 200 with no candidates and a blockReason.
+        block = (body.get("promptFeedback") or {}).get("blockReason")
+        if block:
+            raise LLMError(f"Gemini declined to summarize this transcript ({block})")
+        candidates = body.get("candidates") or []
+        if not candidates:
+            raise LLMError(f"Gemini returned no candidates: {res.text[:300]}")
+        candidate = candidates[0]
+        finish = candidate.get("finishReason")
+        if finish in {"SAFETY", "RECITATION", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII"}:
+            raise LLMError(f"Gemini declined to summarize this transcript ({finish})")
+        parts = (candidate.get("content") or {}).get("parts") or []
+        # Thinking models may return thought-summary parts; skip them.
+        text = "".join(
+            str(p.get("text", "")) for p in parts if isinstance(p, dict) and not p.get("thought")
+        )
+        if not text.strip():
+            raise LLMError(f"Gemini returned an empty response (finishReason={finish})")
+        return text
+
+
 def get_chat(settings: Settings) -> Chat:
     if not settings.llm_enabled:
         raise LLMError("Summarization is disabled (LLM_ENABLED=false)")
     if settings.llm_provider == "anthropic":
         return AnthropicChat(settings)
+    if settings.llm_provider == "gemini":
+        return GeminiChat(settings)
     return DeepSeekChat(settings)

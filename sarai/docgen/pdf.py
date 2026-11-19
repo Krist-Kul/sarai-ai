@@ -21,6 +21,7 @@ from pathlib import Path
 from sarai.docgen.fonts import FONT_NAME, FONTS_DIR
 from sarai.meeting_types import profile
 from sarai.models import MeetingType, MinutesJSON
+from sarai.thai import soft_wrap
 
 log = logging.getLogger("sarai.docgen")
 
@@ -50,9 +51,12 @@ h3 { font-size: 13pt; margin: 8pt 0 2pt 0; }
 .speakers, .rationale, .quote { font-style: italic; }
 ul, ol { margin: 0 0 4pt 0; padding-left: 18pt; }
 li { margin-bottom: 2pt; }
-table { width: 100%%; border-collapse: collapse; margin-top: 4pt; }
+/* Fixed layout: column widths come from <col>, never from the longest
+   unbreakable run of text, so a table cannot grow past the page. */
+table { width: 100%%; border-collapse: collapse; margin-top: 4pt;
+        table-layout: fixed; }
 th, td { border: 0.6pt solid #b8ad9f; padding: 4pt 6pt; vertical-align: top;
-         text-align: left; }
+         text-align: left; overflow-wrap: anywhere; }
 th { font-size: 11pt; background: #f4efe7; }
 .quote { display: block; font-size: 10pt; color: #6f6659; margin-top: 2pt; }
 .actions { page-break-before: always; }
@@ -69,6 +73,11 @@ def to_html(minutes: MinutesJSON, *, model: str, meeting_type: MeetingType) -> s
     minutes are model output built from what people said in the room."""
     labels = profile(meeting_type)
     e = escape
+
+    def c(text: str) -> str:
+        """Escape a table cell, with break points between Thai words."""
+        return escape(soft_wrap(text))
+
     out: list[str] = [
         "<!doctype html><html><head><meta charset='utf-8'>",
         f"<style>{_font_faces()}\n{_CSS % {'font': FONT_NAME}}</style></head><body>",
@@ -77,9 +86,12 @@ def to_html(minutes: MinutesJSON, *, model: str, meeting_type: MeetingType) -> s
     ]
 
     if minutes.attendees:
-        out.append(f"<h2>{_bilingual('ผู้เข้าร่วมประชุม', 'Attendees')}</h2><table>")
+        out.append(
+            f"<h2>{_bilingual('ผู้เข้าร่วมประชุม', 'Attendees')}</h2><table>"
+            "<col style='width:40%'><col style='width:60%'>"
+        )
         for a in minutes.attendees:
-            out.append(f"<tr><td>{e(a.name)}</td><td>{e(a.role or '—')}</td></tr>")
+            out.append(f"<tr><td>{c(a.name)}</td><td>{c(a.role or '—')}</td></tr>")
         out.append("</table>")
 
     if minutes.summary:
@@ -111,15 +123,15 @@ def to_html(minutes: MinutesJSON, *, model: str, meeting_type: MeetingType) -> s
     if minutes.action_items:
         out.append(
             f"<h2 class='actions'>{_bilingual('สิ่งที่ต้องดำเนินการ', 'Action items')}</h2>"
-            "<table><tr>"
+            "<table><col style='width:62%'><col style='width:20%'><col style='width:18%'><tr>"
             f"<th>{_bilingual('สิ่งที่ต้องทำ', 'Task')}</th>"
             f"<th>{_bilingual('ผู้รับผิดชอบ', 'Owner')}</th>"
             f"<th>{_bilingual('กำหนดส่ง', 'Due')}</th></tr>"
         )
         for item in minutes.action_items:
             out.append(
-                f"<tr><td>{e(item.task)}<span class='quote'>“{e(item.source_quote)}”</span></td>"
-                f"<td>{e(item.owner or '—')}</td><td>{e(item.due or '—')}</td></tr>"
+                f"<tr><td>{c(item.task)}<span class='quote'>“{c(item.source_quote)}”</span></td>"
+                f"<td>{c(item.owner or '—')}</td><td>{c(item.due or '—')}</td></tr>"
             )
         out.append("</table>")
 

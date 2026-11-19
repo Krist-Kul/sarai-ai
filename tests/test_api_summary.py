@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from urllib.parse import unquote
 
 import pytest
 from fastapi.testclient import TestClient
@@ -135,12 +136,15 @@ def test_editing_the_summary_saves_and_rerenders_the_document(client: TestClient
         "application/vnd.openxmlformats-officedocument"
     )
     assert download.content[:2] == b"PK"  # a .docx is a zip
+    assert "(Summary)" in unquote(download.headers["content-disposition"])
 
     # The PDF is re-rendered from the same edit.
     pdf = client.get(f"/api/meetings/{mid}/pdf")
     assert pdf.status_code == 200
     assert pdf.headers["content-type"] == "application/pdf"
     assert pdf.content[:5] == b"%PDF-"
+    assert ".pdf" in pdf.headers["content-disposition"]
+    assert "(Summary)" in unquote(pdf.headers["content-disposition"])
 
 
 def test_document_404s_when_the_file_vanished_from_disk(client: TestClient) -> None:

@@ -20,7 +20,7 @@ import time
 from types import FrameType
 
 from sarai import db
-from sarai.config import get_settings
+from sarai.config import Settings, get_settings
 from sarai.models import Job, JobKind, Stage
 from sarai.worker import stages
 from sarai.worker.stages import JobCancelled, StageFailed, StageNotImplemented
@@ -168,6 +168,30 @@ def main() -> int:
     # should report the worker as present throughout it.
     beater.start()
 
+    try:
+        _serve(wid, settings)
+    except Exception:
+        # The heartbeat thread must not outlive a dead claim loop. If it keeps
+        # beating -- a library left a non-daemon thread behind, or the process
+        # is wedged on exit -- the API reports a live worker and every job
+        # sits on "waiting for a free worker" with no hint that nothing will
+        # ever claim it.
+        log.exception("worker %s crashed; stopping heartbeat", wid)
+        return 1
+    finally:
+        stop_beating.set()
+        beater.join(timeout=2.0)
+    log.info("worker %s stopped", wid)
+    return 0
+
+
+def _serve(wid: str, settings: Settings) -> None:
+    """Recover old claims, load models, then claim jobs until told to stop."""
+    from sarai.worker import diarize
+
+    if warning := diarize.license_warning(settings.diarization_model):
+        log.warning(warning)
+
     with db.connection() as conn:
         released = db.release_stale_claims(conn, settings.worker_stale_claim_minutes)
         released += recover_local_claims(conn, socket.gethostname())
@@ -198,11 +222,6 @@ def main() -> int:
                 log.info("job=%s cancelled by user; abandoned", job.id)
             except Exception as exc:  # noqa: BLE001 - the loop must survive any job
                 handle_failure(conn, job, exc, settings.worker_max_attempts)
-
-        stop_beating.set()
-        beater.join(timeout=2.0)
-        log.info("worker %s stopped", wid)
-    return 0
 
 
 if __name__ == "__main__":

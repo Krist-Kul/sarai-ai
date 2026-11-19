@@ -35,7 +35,7 @@ turned off entirely with `LLM_ENABLED=false`.
 | 2 | ASR: model loading, diarization, per-turn transcription, hallucination guard | done |
 | 3 | Job pipeline: SSE progress, retry, crash recovery UI | done |
 | 4 | Transcript review editor | done |
-| 5 | Summarization (DeepSeek / Anthropic) | done |
+| 5 | Summarization (DeepSeek / Anthropic / Gemini) | done |
 | 6 | `.docx` generation with Sarabun | done (font files fetched separately, see below) |
 | 7 | Hardening | partly (delete + disk quota + graceful shutdown exist) |
 
@@ -266,6 +266,79 @@ font at all.
   simultaneous speech to several speakers, which would send the same audio
   through ASR once per speaker.
 
+### Optional: SUPlime-L diarization (non-commercial only)
+
+[`rewayai/suplime-large`](https://huggingface.co/rewayai/suplime-large) is an
+alternative pyannote 4.x pipeline (WavLM-Large segmentation, up to 4 speakers
+per 10 s window, at most 2 at once). It is opt-in and never the default.
+
+> **License:** its weights are **CC BY-NC 4.0 — non-commercial use only**. Sarai
+> itself is MIT, but a worker running SUPlime-L must not be used for commercial
+> work. The worker logs a warning at startup whenever it is selected.
+
+Enable it:
+
+```bash
+make install-suplime   # = uv sync --group api --group worker --group dev --extra suplime
+```
+
+then in `.env.local`:
+
+```
+DIARIZATION_MODEL=rewayai/suplime-large
+```
+
+- **HF_TOKEN is still required.** The repo is gated with automatic approval:
+  open the model page once with the account that issued `HF_TOKEN` and accept.
+  It does not need the two pyannote gates above.
+- **Missing package fails loudly.** If `suplime` is not installed, the worker
+  refuses to start (and a job fails at once) with an error naming the install
+  command. It does not fall back to `SPEAKER_00`. A failed download or a
+  missing token still falls back, as for the default model.
+- `make install-worker` syncs exactly the listed groups, so running it later
+  **removes** `suplime` again. Use `make install-suplime` instead.
+- Its output carries `exclusive_speaker_diarization` (the pipeline subclasses
+  pyannote's `SpeakerDiarization`), so turns flow into ASR exactly as with the
+  default model.
+- Training data is mostly English and Mandarin, with no Thai. Measure it on your
+  own recordings before switching — see below.
+
+Hardware, measured on an RTX 5070 (12 GB) and a 16-thread CPU, warm model:
+
+| | community-1 | SUPlime-L |
+|---|---|---|
+| CUDA, real-time factor | 0.017 | 0.087 (~5× slower) |
+| CUDA, peak VRAM | 2.7 GB | 8.5 GB |
+| CPU, real-time factor | — | ~3 (30 s of audio took 88 s) |
+
+- **CUDA** works and is the only setup the model card covers. The WavLM
+  backbone runs under fp16 autocast; `SUPLIME_FP16=0` forces fp32 (more VRAM).
+  It needs about 8.5 GB of free VRAM next to the ASR model, so a 12 GB card is
+  tight and 8 GB cards will not fit both.
+- **CPU** works but is about three times slower than real time — an hour-long
+  meeting takes about three hours to diarize. Usable only for testing.
+- **Apple Silicon (mps)** has not been tested. fp16 autocast is CUDA-only, so
+  it would run in fp32. If an op fails on mps, the existing mps → cpu fallback
+  takes over, at CPU speed. Run the evaluation below on the Mac before relying
+  on it.
+
+### Comparing diarization models on your recordings
+
+`scripts/eval_diarization.py` runs each model over a folder of recordings with
+hand-labelled RTTM references and reports DER (0 s collar, overlap scored, no
+oracle speaker count), missed speech, false alarm, confusion, speaker-count
+accuracy, wall-clock time and peak VRAM per file, plus a macro average, as CSV
+and on stdout. Its docstring explains how to make the RTTM files with Audacity.
+
+```bash
+make install-suplime
+uv run python scripts/eval_diarization.py path/to/eval-set \
+    --out results/diarization.csv --save-rttm results/hyp
+```
+
+`--models` defaults to `community-1 suplime-large`; `--output regular` scores
+the overlap-aware annotation instead of the exclusive one the worker uses.
+
 ## Configuration
 
 Every setting is an environment variable; see `.env.example` for the full list
@@ -279,8 +352,9 @@ with comments. The ones that matter most:
 | `ASR_BACKEND` | `auto` | `auto` \| `transformers` \| `mlx`; `auto` means MLX on Apple Silicon |
 | `ASR_MODEL_MLX` | `chayapats/typhoon-whisper-turbo-mlx` | the MLX conversion of `ASR_MODEL`; keep the two in step |
 | `HF_TOKEN` | unset | required for diarization |
+| `DIARIZATION_MODEL` | `pyannote/speaker-diarization-community-1` | `rewayai/suplime-large` is opt-in and **non-commercial**, see [above](#optional-suplime-l-diarization-non-commercial-only) |
 | `LLM_ENABLED` | `true` | `false` disables third-party summarization entirely |
-| `LLM_PROVIDER` | `deepseek` | `deepseek` \| `anthropic` |
+| `LLM_PROVIDER` | `deepseek` | `deepseek` \| `anthropic` \| `gemini` (`GEMINI_API_KEY`, `GEMINI_MODEL`) |
 | `UPLOAD_MAX_BYTES` | 500 MB | enforced while streaming, not after |
 | `MIN_FREE_DISK_BYTES` | 5 GB | uploads are rejected below this |
 
@@ -383,7 +457,9 @@ Third-party components keep their own licenses and are not part of this repo:
 - **Model weights** are downloaded at runtime from HuggingFace, each under its
   own license. The pyannote diarization and segmentation models are gated:
   you must accept their terms with your own HuggingFace account (see
-  [Requirements](#requirements)). Check the model cards for
+  [Requirements](#requirements)). The optional SUPlime-L diarization weights
+  (`rewayai/suplime-large`) are **CC BY-NC 4.0, non-commercial only**; they are
+  never downloaded unless you select them. Check the model cards for
   `typhoon-ai/typhoon-whisper-*` before commercial use.
 - **Sarabun font** is fetched by `scripts/fetch_fonts.py` and is licensed under
   the SIL Open Font License (OFL).

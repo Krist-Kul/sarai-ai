@@ -38,3 +38,16 @@ def test_headings_follow_the_meeting_type() -> None:
 def test_render_writes_a_pdf(tmp_path: Path) -> None:
     dest = render_pdf(_minutes(), tmp_path / "out.pdf", model="m")
     assert dest.read_bytes()[:5] == b"%PDF-"
+
+
+def test_tables_have_fixed_columns_and_wrappable_thai() -> None:
+    """A long unspaced Thai quote must not widen the action table off the page."""
+    quote = "เดี๋ยวลองเอาอันนี้ไปลองใช้กับอายุโคกคิวบดูครับผมคิดว่ามันน่าจะแม่นขึ้น"
+    minutes = _minutes(
+        action_items=[ActionItem(task="ส่งเอกสาร", owner="คุณมาลี", source_quote=quote).model_dump()]
+    )
+    html = to_html(minutes, model="m", meeting_type=MeetingType.GENERAL)
+    assert "table-layout: fixed" in html
+    assert "<col style='width:62%'>" in html
+    assert quote not in html  # broken up by zero-width spaces
+    assert quote in html.replace("​", "")

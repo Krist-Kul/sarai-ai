@@ -44,3 +44,11 @@ def test_truncate_returns_short_text_unchanged() -> None:
 def test_normalize_is_idempotent() -> None:
     once = thai.normalize("เร็ว ๆ ครับ ครับ")
     assert thai.normalize(once) == once
+
+
+def test_soft_wrap_marks_thai_word_breaks_and_keeps_text() -> None:
+    text = "เดี๋ยวลองเอาอันนี้ไปลองใช้ดู ArUco"
+    wrapped = thai.soft_wrap(text)
+    assert thai.ZWSP in wrapped
+    assert wrapped.replace(thai.ZWSP, "") == text
+    assert thai.soft_wrap("plain English") == "plain English"
