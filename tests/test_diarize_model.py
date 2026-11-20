@@ -1,10 +1,9 @@
-"""Diarization model selection: the default pyannote pipeline vs the opt-in
-SUPlime one. pyannote and torch are stubbed in sys.modules, so nothing is
-downloaded and the tests run in CI without the worker group installed."""
+"""Diarization model loading and output handling. pyannote and torch are
+stubbed in sys.modules, so nothing is downloaded and the tests run in CI
+without the worker group installed."""
 
 from __future__ import annotations
 
-import importlib.util
 import logging
 import sys
 from collections.abc import Iterator
@@ -20,7 +19,6 @@ from sarai.worker import diarize
 from sarai.worker.stages import StageFailed
 
 DEFAULT = "pyannote/speaker-diarization-community-1"
-SUPLIME = "rewayai/suplime-large"
 
 
 class MissingDependency(Exception):
@@ -76,17 +74,9 @@ def loader(monkeypatch: pytest.MonkeyPatch) -> Iterator[_Loader]:
     get_settings.cache_clear()
 
 
-def _select(monkeypatch: pytest.MonkeyPatch, model: str, *, suplime_installed: bool) -> None:
+def _select(monkeypatch: pytest.MonkeyPatch, model: str = DEFAULT) -> None:
     monkeypatch.setenv("DIARIZATION_MODEL", model)
     get_settings.cache_clear()
-    real_find_spec = importlib.util.find_spec
-
-    def find_spec(name: str, *args: Any) -> Any:
-        if name == "suplime":
-            return object() if suplime_installed else None
-        return real_find_spec(name, *args)
-
-    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
 
 
 def test_default_model_is_unchanged() -> None:
@@ -94,53 +84,17 @@ def test_default_model_is_unchanged() -> None:
     assert type(get_settings()).model_fields["diarization_model"].default == DEFAULT
 
 
-@pytest.mark.parametrize(
-    ("model", "expected"),
-    [(DEFAULT, False), (SUPLIME, True), ("rewayai/suplime", True), ("RewayAI/SUPlime-Large", True)],
-)
-def test_is_suplime(model: str, expected: bool) -> None:
-    assert diarize.is_suplime(model) is expected
-
-
-def test_license_warning_only_for_non_commercial_models() -> None:
-    assert diarize.license_warning(DEFAULT) is None
-    warning = diarize.license_warning(SUPLIME)
-    assert warning is not None
-    assert "CC BY-NC 4.0" in warning
-    assert "\n" not in warning
-
-
 def test_selected_model_and_token_reach_from_pretrained(
     loader: _Loader, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _select(monkeypatch, SUPLIME, suplime_installed=True)
+    _select(monkeypatch)
     pipeline = diarize.load_pipeline()
     assert pipeline is loader.result
-    assert loader.calls == [(SUPLIME, "hf_test")]
+    assert loader.calls == [(DEFAULT, "hf_test")]
     assert pipeline.device.type == "cpu"
 
 
-def test_missing_suplime_package_fails_loudly(
-    loader: _Loader, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _select(monkeypatch, SUPLIME, suplime_installed=False)
-    with pytest.raises(diarize.DiarizationSetupError, match="make install-suplime"):
-        diarize.load_pipeline()
-    assert loader.calls == []
-    # A configuration error, not a degraded mode: the next call fails again.
-    assert diarize._pipeline_failed is False
-
-
-def test_missing_suplime_fails_even_without_a_token(
-    loader: _Loader, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("HF_TOKEN", "")
-    _select(monkeypatch, SUPLIME, suplime_installed=False)
-    with pytest.raises(diarize.DiarizationSetupError):
-        diarize.load_pipeline()
-
-
-def test_missing_suplime_is_a_permanent_job_failure() -> None:
+def test_setup_error_is_a_permanent_job_failure() -> None:
     # StageFailed makes the worker fail the job once instead of retrying it.
     assert issubclass(diarize.DiarizationSetupError, StageFailed)
 
@@ -148,34 +102,16 @@ def test_missing_suplime_is_a_permanent_job_failure() -> None:
 def test_pyannote_missing_dependency_is_not_degraded(
     loader: _Loader, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _select(monkeypatch, SUPLIME, suplime_installed=True)
-    loader.error = MissingDependency("suplime>=0.3 required")
-    with pytest.raises(diarize.DiarizationSetupError, match="suplime>=0.3"):
+    _select(monkeypatch)
+    loader.error = MissingDependency("somepkg>=1.0 required")
+    with pytest.raises(diarize.DiarizationSetupError, match="somepkg>=1.0"):
         diarize.load_pipeline()
 
 
-def test_missing_suplime_does_not_affect_the_default_model(
-    loader: _Loader, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _select(monkeypatch, DEFAULT, suplime_installed=False)
-    assert diarize.load_pipeline() is loader.result
-
-
-def test_suplime_load_failure_names_suplime_not_pyannote_gates(
+def test_load_failure_points_at_both_pyannote_gates(
     loader: _Loader, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    _select(monkeypatch, SUPLIME, suplime_installed=True)
-    loader.error = OSError("401 Client Error")
-    with caplog.at_level(logging.ERROR, logger="sarai.worker.diarize"):
-        assert diarize.load_pipeline() is None
-    assert "huggingface.co/rewayai/suplime-large" in caplog.text
-    assert "segmentation-3.0" not in caplog.text
-
-
-def test_default_load_failure_still_points_at_both_pyannote_gates(
-    loader: _Loader, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    _select(monkeypatch, DEFAULT, suplime_installed=False)
+    _select(monkeypatch)
     loader.error = OSError("403 Client Error")
     with caplog.at_level(logging.ERROR, logger="sarai.worker.diarize"):
         assert diarize.load_pipeline() is None
@@ -183,13 +119,10 @@ def test_default_load_failure_still_points_at_both_pyannote_gates(
     assert "segmentation-3.0" in caplog.text
 
 
-def test_no_token_still_falls_back_for_either_model(
-    loader: _Loader, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_no_token_falls_back(loader: _Loader, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HF_TOKEN", "")
-    for model in (DEFAULT, SUPLIME):
-        _select(monkeypatch, model, suplime_installed=True)
-        assert diarize.load_pipeline() is None
+    _select(monkeypatch)
+    assert diarize.load_pipeline() is None
     assert loader.calls == []
 
 
@@ -217,7 +150,7 @@ def test_diarize_reads_the_exclusive_annotation(
         exclusive_speaker_diarization=_Annotation([(0.0, 5.0, "A"), (5.0, 10.0, "B")]),
     )
     loader.result = _FakePipeline(output)
-    _select(monkeypatch, SUPLIME, suplime_installed=True)
+    _select(monkeypatch)
     turns = diarize.diarize(Path("x.wav"), None, SR)
     assert [(t.start, t.end, t.speaker) for t in turns] == [(0.0, 5.0, "A"), (5.0, 10.0, "B")]
 
@@ -226,7 +159,7 @@ def test_unavailable_pipeline_falls_back_to_one_speaker(
     loader: _Loader, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HF_TOKEN", "")
-    _select(monkeypatch, DEFAULT, suplime_installed=False)
+    _select(monkeypatch)
     samples = np.zeros(SR * 3, dtype=np.float32)
     turns = diarize.diarize(Path("x.wav"), samples, SR)
     assert {t.speaker for t in turns} == {"SPEAKER_00"}

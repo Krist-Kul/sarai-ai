@@ -22,10 +22,6 @@ install: ## Install API + dev deps and the frontend (no torch)
 install-worker: ## Add the worker deps (torch, transformers, pyannote) -- several GB
 	$(UV) sync --group api --group worker --group dev
 
-.PHONY: install-suplime
-install-suplime: ## Worker deps + the optional SUPlime-L diarizer (CC BY-NC 4.0: non-commercial)
-	$(UV) sync --group api --group worker --group dev --extra suplime
-
 # --- run -------------------------------------------------------------------
 
 .PHONY: api

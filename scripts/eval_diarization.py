@@ -1,7 +1,7 @@
 """Compare diarization models on your own recordings against hand-made RTTMs.
 
     uv run python scripts/eval_diarization.py DATA_DIR
-    uv run python scripts/eval_diarization.py DATA_DIR --models community-1 suplime-large \\
+    uv run python scripts/eval_diarization.py DATA_DIR --models community-1 \\
         --out results/diarization.csv --device cuda
 
 DATA_DIR holds audio files (any format the app accepts) and, next to each, a
@@ -89,10 +89,8 @@ from sarai.worker.stages import read_wav  # noqa: E402
 
 ALIASES = {
     "community-1": "pyannote/speaker-diarization-community-1",
-    "suplime-large": "rewayai/suplime-large",
-    "suplime": "rewayai/suplime",
 }
-DEFAULT_MODELS = ["community-1", "suplime-large"]
+DEFAULT_MODELS = ["community-1"]
 WARMUP_SECONDS = 10
 
 
@@ -167,10 +165,9 @@ def load_model(model: str, device: str) -> Any:
     import torch
     from pyannote.audio import Pipeline
 
-    diarize.require_model_package(model)
     pipeline = Pipeline.from_pretrained(model, token=get_settings().hf_token)
     if pipeline is None:
-        raise RuntimeError(f"no pipeline for {model}.\n{diarize.gate_help(model)}")
+        raise RuntimeError(f"no pipeline for {model}.\n{diarize.GATE_HELP}")
     pipeline.to(torch.device(device))
     return pipeline
 
@@ -294,9 +291,6 @@ def main() -> int:
         return 1
     device = args.device or diarize.diarization_device()
     models = [ALIASES.get(m, m) for m in args.models]
-    for model in models:
-        if warning := diarize.license_warning(model):
-            print(f"note: {warning}", file=sys.stderr)
 
     rows: list[Row] = []
     with tempfile.TemporaryDirectory(prefix="sarai-eval-") as tmp:

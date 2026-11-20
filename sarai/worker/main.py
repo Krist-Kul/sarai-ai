@@ -28,13 +28,26 @@ from sarai.worker.stages import JobCancelled, StageFailed, StageNotImplemented
 log = logging.getLogger("sarai.worker")
 
 _stop = False
+_in_job = False
 
 
 def _handle_signal(signum: int, frame: FrameType | None) -> None:
-    """Finish the job in hand, then exit. Killing mid-transcription wastes minutes."""
+    """Finish the job in hand, then exit. Killing mid-transcription wastes minutes.
+
+    Only a running job is worth waiting for. Idle, or still loading/downloading
+    models, there is nothing to finish, and swallowing the signal there left
+    Ctrl-C doing nothing while a stuck model download logged retries forever.
+    A second signal always exits at once.
+    """
     global _stop
+    if _stop:
+        log.warning("signal %s received again; exiting now", signum)
+        os._exit(130)
     _stop = True
-    log.info("signal %s received; finishing current job then exiting", signum)
+    if not _in_job:
+        log.info("signal %s received; exiting", signum)
+        raise SystemExit(0)
+    log.info("signal %s received; finishing current job then exiting (repeat to force)", signum)
 
 
 def worker_id() -> str:
@@ -187,11 +200,7 @@ def main() -> int:
 
 def _serve(wid: str, settings: Settings) -> None:
     """Recover old claims, load models, then claim jobs until told to stop."""
-    from sarai.worker import diarize
-
-    if warning := diarize.license_warning(settings.diarization_model):
-        log.warning(warning)
-
+    global _in_job
     with db.connection() as conn:
         released = db.release_stale_claims(conn, settings.worker_stale_claim_minutes)
         released += recover_local_claims(conn, socket.gethostname())
@@ -215,6 +224,7 @@ def _serve(wid: str, settings: Settings) -> None:
             if job is None:
                 time.sleep(settings.worker_poll_seconds)
                 continue
+            _in_job = True
             try:
                 run_job(conn, job)
             except JobCancelled:
@@ -222,6 +232,8 @@ def _serve(wid: str, settings: Settings) -> None:
                 log.info("job=%s cancelled by user; abandoned", job.id)
             except Exception as exc:  # noqa: BLE001 - the loop must survive any job
                 handle_failure(conn, job, exc, settings.worker_max_attempts)
+            finally:
+                _in_job = False
 
 
 if __name__ == "__main__":
