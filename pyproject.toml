@@ -1,6 +1,6 @@
 [project]
 name = "sarai"
-version = "0.2.0"
+version = "0.3.0"
 description = "Sarai AI - self-hosted Thai/English meeting minutes generator"
 requires-python = ">=3.11"
 dependencies = [

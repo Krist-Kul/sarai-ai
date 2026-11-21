@@ -12,10 +12,13 @@ import socket
 import sqlite3
 import subprocess
 import uuid
+from pathlib import Path
+
+import pytest
 
 from sarai import db
 from sarai.models import JobKind, LanguageHint, Meeting, Stage
-from sarai.worker.main import recover_local_claims
+from sarai.worker.main import recover_local_claims, source_stamp
 
 HOST = socket.gethostname()
 
@@ -109,3 +112,41 @@ def test_claims_by_host_ignores_unparseable_worker_ids() -> None:
         db.claim_job(conn, "no-pid-here")
         db.update_job(conn, job_id, stage=Stage.TRANSCRIBING)
         assert db.claims_by_host(conn, "no-pid-here") == []
+
+
+def test_source_stamp_moves_when_a_module_changes(tmp_path: Path) -> None:
+    module = tmp_path / "pkg" / "mod.py"
+    module.parent.mkdir()
+    module.write_text("x = 1\n")
+    os.utime(module, (1_000, 1_000))
+    before = source_stamp(tmp_path)
+
+    module.write_text("x = 2\n")
+    os.utime(module, (2_000, 2_000))
+    assert source_stamp(tmp_path) > before
+
+
+def test_worker_restarts_when_idle_after_a_code_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sarai.worker.main as worker_main
+    from sarai.config import get_settings
+
+    monkeypatch.setenv("WORKER_RELOAD", "true")
+    get_settings.cache_clear()
+    monkeypatch.setattr(worker_main, "preload_models", lambda: None)
+    monkeypatch.setattr(worker_main.signal, "signal", lambda *_a: None)
+    monkeypatch.setattr(worker_main, "_restart", False)
+    stamps = iter([1.0, 1.0, 2.0])  # start, first idle poll, then a file changed
+    monkeypatch.setattr(worker_main, "source_stamp", lambda: next(stamps))
+    monkeypatch.setattr(worker_main.time, "sleep", lambda _s: None)
+    execs: list[list[str]] = []
+
+    def fake_execv(_path: str, argv: list[str]) -> None:
+        execs.append(argv)
+
+    monkeypatch.setattr(worker_main.os, "execv", fake_execv)
+
+    worker_main.main()
+
+    assert execs and execs[0][1:] == ["-m", "sarai.worker.main"]

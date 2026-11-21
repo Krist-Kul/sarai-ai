@@ -76,7 +76,7 @@ async def test_request_shape_and_text(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_http_error_status(monkeypatch: pytest.MonkeyPatch) -> None:
     _install(monkeypatch, lambda _r: httpx.Response(429, text="quota"))
     with pytest.raises(LLMError, match="Gemini returned 429"):
-        await GeminiChat(_settings()).complete("s", "u")
+        await GeminiChat(_settings(llm_retries=0)).complete("s", "u")
 
 
 async def test_blocked_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,5 +96,6 @@ async def test_safety_finish(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_empty_text(monkeypatch: pytest.MonkeyPatch) -> None:
     _install(monkeypatch, lambda _r: _ok([], finish="MAX_TOKENS"))
-    with pytest.raises(LLMError, match="empty.*MAX_TOKENS"):
+    # Thinking can spend the whole budget before any text: still a cut-off.
+    with pytest.raises(LLMError, match="cut off"):
         await GeminiChat(_settings()).complete("s", "u")

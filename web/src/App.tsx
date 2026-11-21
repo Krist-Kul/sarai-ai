@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, Route, Routes } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { ButtonLink, Mark, Notice } from "./components/ui";
 import { api } from "./lib/api";
 import { LangContext, loadLang, saveLang, useI18n, type Lang } from "./lib/i18n";
+import {
+  applyTheme,
+  loadThemePref,
+  saveThemePref,
+  systemTheme,
+  watchSystemTheme,
+  type Theme,
+  type ThemePref,
+} from "./lib/theme";
 import { MeetingsPage } from "./pages/MeetingsPage";
 import { NewMeetingPage } from "./pages/NewMeetingPage";
 import { MeetingPage } from "./pages/MeetingPage";
@@ -26,6 +35,74 @@ function LanguageToggle() {
           }`}
         >
           {code === "th" ? "ไทย" : "EN"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const THEME_ICONS: Record<ThemePref, ReactNode> = {
+  system: (
+    <>
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8M12 16v4" />
+    </>
+  ),
+  light: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </>
+  ),
+  dark: <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />,
+};
+
+const THEME_LABELS = { system: "themeSystem", light: "themeLight", dark: "themeDark" } as const;
+
+function ThemeToggle() {
+  const { t } = useI18n();
+  const [pref, setPref] = useState<ThemePref>(() => loadThemePref());
+  const [system, setSystem] = useState<Theme>(() => systemTheme());
+
+  // Track the OS appearance always; it only shows while the pref is "system".
+  useEffect(() => watchSystemTheme(setSystem), []);
+  useEffect(() => applyTheme(pref === "system" ? system : pref), [pref, system]);
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label={t("theme")}
+      className="flex rounded-full border border-line bg-surface-raised p-[3px]"
+    >
+      {(["system", "light", "dark"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          role="radio"
+          aria-checked={pref === option}
+          aria-label={t(THEME_LABELS[option])}
+          title={t(THEME_LABELS[option])}
+          onClick={() => {
+            saveThemePref(option);
+            setPref(option);
+          }}
+          className={`grid size-[28px] cursor-pointer place-items-center rounded-full ${
+            pref === option ? "bg-ink text-on-ink" : "text-ink-muted hover:text-ink"
+          }`}
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            {THEME_ICONS[option]}
+          </svg>
         </button>
       ))}
     </div>
@@ -63,6 +140,7 @@ function Header() {
             {t("meetings")}
           </NavLink>
           <LanguageToggle />
+          <ThemeToggle />
           <ButtonLink to="/new" icon="upload" className="ml-1 max-sm:h-8 max-sm:px-4">
             {t("newMeeting")}
           </ButtonLink>

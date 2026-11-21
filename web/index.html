@@ -16,6 +16,15 @@
       rel="stylesheet"
     />
     <meta name="color-scheme" content="light dark" />
+    <!-- Set the theme before first paint; same rule as src/lib/theme.ts. -->
+    <script>
+      try {
+        var t = localStorage.getItem("sarai.theme");
+        if (t !== "light" && t !== "dark")
+          t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

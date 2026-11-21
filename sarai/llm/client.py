@@ -2,8 +2,10 @@
 
 Three providers, one method. The summarizer only ever needs "here is a system
 prompt and a user message, give me back text", so that is the whole interface --
-map-reduce, validation and retries live in `sarai.llm.summarize` and work
-identically against either provider.
+map-reduce and schema validation live in `sarai.llm.summarize` and work
+identically against any provider. Temporary provider failures (rate limits,
+overload, dropped connections) are retried here, below that interface, so
+every caller gets them.
 
 Both are text-only. Audio never reaches them; that is the entire point of the
 architecture and it is enforced here by there being no way to send bytes.
@@ -11,7 +13,9 @@ architecture and it is enforced here by there being no way to send bytes.
 
 from __future__ import annotations
 
-from typing import Protocol
+import asyncio
+import logging
+from typing import Any, Protocol
 
 import httpx
 
@@ -20,6 +24,16 @@ from sarai.config import Settings
 # Non-streaming: minutes for a 90-minute meeting land well inside this, and the
 # SDK's own HTTP timeout is the backstop. Anything larger would need streaming.
 MAX_TOKENS = 16_000
+
+log = logging.getLogger("sarai.llm")
+
+# Statuses that mean "not now", not "no": rate limits, overload, gateway
+# trouble. Everything else (400 bad request, 401/403 key, 404 model) fails
+# at once -- retrying cannot fix it.
+TRANSIENT_STATUSES = frozenset({408, 409, 429, 500, 502, 503, 504, 529})
+
+# Module-level so tests can skip the waits.
+_sleep = asyncio.sleep
 
 
 class LLMError(RuntimeError):
@@ -36,6 +50,57 @@ class Chat(Protocol):
     async def complete(self, system: str, user: str) -> str: ...
 
 
+def _retry_after(res: httpx.Response) -> float | None:
+    value = res.headers.get("retry-after")
+    try:
+        return float(value) if value is not None else None
+    except ValueError:
+        return None  # an HTTP date; fall back to our own backoff
+
+
+async def post_with_retry(
+    provider: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    settings: Settings,
+) -> httpx.Response:
+    """POST, retrying temporary failures with backoff.
+
+    Returns the final response, which may still be an error status: the
+    caller turns it into an LLMError with the provider's own message.
+    """
+    attempts = settings.llm_retries + 1
+    for attempt in range(1, attempts + 1):
+        res: httpx.Response | None = None
+        try:
+            async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
+                res = await client.post(url, headers=headers, json=payload)
+        except httpx.HTTPError as exc:
+            if attempt == attempts:
+                raise LLMError(f"Could not reach {provider}: {exc}") from exc
+            reason = f"{type(exc).__name__}: {exc}"
+        else:
+            if res.status_code not in TRANSIENT_STATUSES or attempt == attempts:
+                return res
+            reason = f"{res.status_code} {res.text[:120]}"
+
+        backoff = 2.0**attempt  # 2, 4, 8, 16, 32...
+        hinted = _retry_after(res) if res is not None else None
+        wait = min(hinted if hinted is not None else backoff, settings.llm_retry_max_wait_seconds)
+        log.warning(
+            "%s request failed (%s); retry %d of %d in %.0fs",
+            provider,
+            reason,
+            attempt,
+            attempts - 1,
+            wait,
+        )
+        await _sleep(wait)
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 class DeepSeekChat:
     """DeepSeek's OpenAI-compatible /chat/completions endpoint."""
 
@@ -45,7 +110,7 @@ class DeepSeekChat:
         self.model = settings.deepseek_model
         self._key = settings.deepseek_api_key
         self._url = settings.deepseek_base_url.rstrip("/") + "/chat/completions"
-        self._timeout = settings.llm_timeout_seconds
+        self._settings = settings
 
     async def complete(self, system: str, user: str) -> str:
         payload = {
@@ -59,15 +124,13 @@ class DeepSeekChat:
             # against MinutesJSON -- valid JSON is not a valid schema.
             "response_format": {"type": "json_object"},
         }
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            try:
-                res = await client.post(
-                    self._url,
-                    headers={"Authorization": f"Bearer {self._key}"},
-                    json=payload,
-                )
-            except httpx.HTTPError as exc:
-                raise LLMError(f"Could not reach DeepSeek: {exc}") from exc
+        res = await post_with_retry(
+            "DeepSeek",
+            self._url,
+            headers={"Authorization": f"Bearer {self._key}"},
+            payload=payload,
+            settings=self._settings,
+        )
 
         if res.status_code != 200:
             raise LLMError(f"DeepSeek returned {res.status_code}: {res.text[:300]}")
@@ -96,6 +159,8 @@ class AnthropicChat:
             api_key=settings.anthropic_api_key,
             base_url=settings.anthropic_base_url,
             timeout=settings.llm_timeout_seconds,
+            # The SDK retries 429/5xx/connection errors itself, with backoff.
+            max_retries=settings.llm_retries,
         )
 
     async def complete(self, system: str, user: str) -> str:
@@ -134,7 +199,7 @@ class GeminiChat:
         self._url = (
             f"{settings.gemini_base_url.rstrip('/')}/v1beta/models/{self.model}:generateContent"
         )
-        self._timeout = settings.llm_timeout_seconds
+        self._settings = settings
 
     async def complete(self, system: str, user: str) -> str:
         payload = {
@@ -148,16 +213,14 @@ class GeminiChat:
                 "responseMimeType": "application/json",
             },
         }
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            try:
-                res = await client.post(
-                    self._url,
-                    # Header, not ?key=, so the key never lands in a logged URL.
-                    headers={"x-goog-api-key": self._key},
-                    json=payload,
-                )
-            except httpx.HTTPError as exc:
-                raise LLMError(f"Could not reach Gemini: {exc}") from exc
+        res = await post_with_retry(
+            "Gemini",
+            self._url,
+            # Header, not ?key=, so the key never lands in a logged URL.
+            headers={"x-goog-api-key": self._key},
+            payload=payload,
+            settings=self._settings,
+        )
 
         if res.status_code != 200:
             raise LLMError(f"Gemini returned {res.status_code}: {res.text[:300]}")
@@ -182,6 +245,12 @@ class GeminiChat:
         text = "".join(
             str(p.get("text", "")) for p in parts if isinstance(p, dict) and not p.get("thought")
         )
+        if finish == "MAX_TOKENS":
+            # Truncated JSON would otherwise surface as a baffling schema error.
+            raise LLMError(
+                f"Gemini's answer was cut off at the {MAX_TOKENS}-token output limit. "
+                "Lower LLM_SINGLE_CALL_CHARS / LLM_CHUNK_CHARS so each call is smaller."
+            )
         if not text.strip():
             raise LLMError(f"Gemini returned an empty response (finishReason={finish})")
         return text

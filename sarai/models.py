@@ -198,7 +198,9 @@ class ActionItem(BaseModel):
     source_quote: str
 
 
-class MinutesJSON(BaseModel):
+class MinutesContent(BaseModel):
+    """The minutes in one language. MinutesJSON is this plus its translation."""
+
     title: str
     meeting_date: str | None = None
     attendees: list[Attendee] = Field(default_factory=list)
@@ -209,6 +211,13 @@ class MinutesJSON(BaseModel):
     action_items: list[ActionItem] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     next_meeting: str | None = None
+
+
+class MinutesJSON(MinutesContent):
+    # The whole minutes again in English, for the second half of the document.
+    # Made by a separate translation call after the minutes are final; None when
+    # that call failed or the minutes predate it.
+    english: MinutesContent | None = None
 
 
 class SummaryResponse(BaseModel):

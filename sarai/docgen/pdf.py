@@ -1,9 +1,10 @@
 """MinutesJSON -> .pdf, the read-only twin of the .docx.
 
 The .docx stays the editable document; the PDF is what gets sent around. It
-is rendered from the same MinutesJSON with the same section order and headings
-as `sarai.docgen.render`, through HTML and WeasyPrint rather than by converting
-the .docx: that would need LibreOffice on every host, and WeasyPrint shapes
+is rendered from the same MinutesJSON with the same parts (Thai, then
+English), section order and headings as `sarai.docgen.render`, through HTML
+and WeasyPrint rather than by converting the .docx: that would need
+LibreOffice on every host, and WeasyPrint shapes
 Thai through Pango and HarfBuzz, which handles stacked vowels and tone marks
 and breaks lines between Thai words (via libthai).
 
@@ -18,9 +19,11 @@ from datetime import UTC, datetime
 from html import escape
 from pathlib import Path
 
+from sarai.docgen import labels as L
 from sarai.docgen.fonts import FONT_NAME, FONTS_DIR
+from sarai.docgen.labels import Lang
 from sarai.meeting_types import profile
-from sarai.models import MeetingType, MinutesJSON
+from sarai.models import MeetingType, MinutesContent, MinutesJSON
 from sarai.thai import soft_wrap
 
 log = logging.getLogger("sarai.docgen")
@@ -47,8 +50,8 @@ body { font-family: '%(font)s', 'Noto Sans Thai', 'Tahoma', sans-serif;
 h1 { font-size: 18pt; margin: 0 0 4pt 0; }
 h2 { font-size: 14pt; margin: 14pt 0 4pt 0; }
 h3 { font-size: 13pt; margin: 8pt 0 2pt 0; }
-.meta, .speakers, .rationale, .footer { font-size: 10pt; color: #6f6659; }
-.speakers, .rationale, .quote { font-style: italic; }
+.meta, .rationale, .footer { font-size: 10pt; color: #6f6659; }
+.rationale, .quote { font-style: italic; }
 ul, ol { margin: 0 0 4pt 0; padding-left: 18pt; }
 li { margin-bottom: 2pt; }
 /* Fixed layout: column widths come from <col>, never from the longest
@@ -60,17 +63,20 @@ th, td { border: 0.6pt solid #b8ad9f; padding: 4pt 6pt; vertical-align: top;
 th { font-size: 11pt; background: #f4efe7; }
 .quote { display: block; font-size: 10pt; color: #6f6659; margin-top: 2pt; }
 .actions { page-break-before: always; }
+.part + .part { page-break-before: always; }
 .footer { margin-top: 24pt; color: #9c9184; }
+.ai-notice { font-size: 10pt; color: #9a3412; background: #fff7ed;
+             border-left: 3pt solid #ea580c; padding: 4pt 8pt; margin: 6pt 0 10pt 0; }
 """
 
 
-def _bilingual(thai_label: str, english_label: str) -> str:
-    return escape(f"{thai_label} / {english_label}")
+def _label(labels: tuple[str, str], lang: Lang) -> str:
+    return escape(labels[0] if lang == "th" else labels[1])
 
 
-def to_html(minutes: MinutesJSON, *, model: str, meeting_type: MeetingType) -> str:
-    """The whole document as one HTML string. Every value is escaped: the
-    minutes are model output built from what people said in the room."""
+def _part(content: MinutesContent, lang: Lang, meeting_type: MeetingType) -> list[str]:
+    """One language's full minutes, unlabelled: its headings show the
+    language. Every value is escaped: the minutes are model output built from what people said."""
     labels = profile(meeting_type)
     e = escape
 
@@ -79,75 +85,86 @@ def to_html(minutes: MinutesJSON, *, model: str, meeting_type: MeetingType) -> s
         return escape(soft_wrap(text))
 
     out: list[str] = [
-        "<!doctype html><html><head><meta charset='utf-8'>",
-        f"<style>{_font_faces()}\n{_CSS % {'font': FONT_NAME}}</style></head><body>",
-        f"<h1>{e(minutes.title)}</h1>",
-        f"<p class='meta'>{_bilingual('วันที่ประชุม', 'Date')}: {e(minutes.meeting_date or '—')}</p>",
+        f"<section class='part' lang='{lang}'>",
+        f"<h1>{e(content.title)}</h1>",
+        f"<p class='meta'>{_label(L.DATE, lang)}: {e(content.meeting_date or '—')}</p>",
+        f"<p class='ai-notice'>{_label(L.AI_NOTICE, lang)}</p>",
     ]
 
-    if minutes.attendees:
+    if content.attendees:
         out.append(
-            f"<h2>{_bilingual('ผู้เข้าร่วมประชุม', 'Attendees')}</h2><table>"
+            f"<h2>{_label(L.ATTENDEES, lang)}</h2><table>"
             "<col style='width:40%'><col style='width:60%'>"
+            f"<tr><th>{_label(L.NAME, lang)}</th><th>{_label(L.ROLE, lang)}</th></tr>"
         )
-        for a in minutes.attendees:
+        for a in content.attendees:
             out.append(f"<tr><td>{c(a.name)}</td><td>{c(a.role or '—')}</td></tr>")
         out.append("</table>")
 
-    if minutes.summary:
-        out.append(f"<h2>{_bilingual(*labels.summary_label)}</h2><p>{e(minutes.summary)}</p>")
+    if content.summary:
+        out.append(f"<h2>{_label(labels.summary_label, lang)}</h2><p>{e(content.summary)}</p>")
 
-    if minutes.agenda:
-        out.append(f"<h2>{_bilingual('วาระการประชุม', 'Agenda')}</h2><ol>")
-        out.extend(f"<li>{e(item)}</li>" for item in minutes.agenda)
+    if content.agenda:
+        out.append(f"<h2>{_label(L.AGENDA, lang)}</h2><ol>")
+        out.extend(f"<li>{e(item)}</li>" for item in content.agenda)
         out.append("</ol>")
 
-    if minutes.discussion:
-        out.append(f"<h2>{_bilingual(*labels.discussion_label)}</h2>")
-        for topic in minutes.discussion:
+    if content.discussion:
+        out.append(f"<h2>{_label(labels.discussion_label, lang)}</h2>")
+        for topic in content.discussion:
             out.append(f"<h3>{e(topic.topic)}</h3>")
-            if topic.speakers:
-                out.append(f"<p class='speakers'>{e(', '.join(topic.speakers))}</p>")
             if topic.points:
                 out.append("<ul>")
                 out.extend(f"<li>{e(p)}</li>" for p in topic.points)
                 out.append("</ul>")
 
-    if minutes.decisions:
-        out.append(f"<h2>{_bilingual('มติที่ประชุม', 'Decisions')}</h2><ol>")
-        for d in minutes.decisions:
+    if content.decisions:
+        out.append(f"<h2>{_label(L.DECISIONS, lang)}</h2><ol>")
+        for d in content.decisions:
             rationale = f"<div class='rationale'>{e(d.rationale)}</div>" if d.rationale else ""
             out.append(f"<li>{e(d.decision)}{rationale}</li>")
         out.append("</ol>")
 
-    if minutes.action_items:
+    if content.action_items:
         out.append(
-            f"<h2 class='actions'>{_bilingual('สิ่งที่ต้องดำเนินการ', 'Action items')}</h2>"
+            f"<h2 class='actions'>{_label(L.ACTIONS, lang)}</h2>"
             "<table><col style='width:62%'><col style='width:20%'><col style='width:18%'><tr>"
-            f"<th>{_bilingual('สิ่งที่ต้องทำ', 'Task')}</th>"
-            f"<th>{_bilingual('ผู้รับผิดชอบ', 'Owner')}</th>"
-            f"<th>{_bilingual('กำหนดส่ง', 'Due')}</th></tr>"
+            f"<th>{_label(L.TASK, lang)}</th>"
+            f"<th>{_label(L.OWNER, lang)}</th>"
+            f"<th>{_label(L.DUE, lang)}</th></tr>"
         )
-        for item in minutes.action_items:
+        for item in content.action_items:
             out.append(
                 f"<tr><td>{c(item.task)}<span class='quote'>“{c(item.source_quote)}”</span></td>"
                 f"<td>{c(item.owner or '—')}</td><td>{c(item.due or '—')}</td></tr>"
             )
         out.append("</table>")
 
-    if minutes.open_questions:
-        out.append(f"<h2>{_bilingual('ประเด็นค้าง', 'Open questions')}</h2><ul>")
-        out.extend(f"<li>{e(q)}</li>" for q in minutes.open_questions)
+    if content.open_questions:
+        out.append(f"<h2>{_label(L.OPEN_QUESTIONS, lang)}</h2><ul>")
+        out.extend(f"<li>{e(q)}</li>" for q in content.open_questions)
         out.append("</ul>")
 
-    if minutes.next_meeting:
-        out.append(
-            f"<h2>{_bilingual('การประชุมครั้งต่อไป', 'Next meeting')}</h2>"
-            f"<p>{e(minutes.next_meeting)}</p>"
-        )
+    if content.next_meeting:
+        out.append(f"<h2>{_label(L.NEXT_MEETING, lang)}</h2><p>{e(content.next_meeting)}</p>")
+
+    out.append("</section>")
+    return out
+
+
+def to_html(minutes: MinutesJSON, *, model: str, meeting_type: MeetingType) -> str:
+    """The whole document as one HTML string: the Thai part, then the English
+    part on a new page when there is a translation."""
+    out: list[str] = [
+        "<!doctype html><html><head><meta charset='utf-8'>",
+        f"<style>{_font_faces()}\n{_CSS % {'font': FONT_NAME}}</style></head><body>",
+    ]
+    out.extend(_part(minutes, "th", meeting_type))
+    if minutes.english is not None:
+        out.extend(_part(minutes.english, "en", meeting_type))
 
     generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    out.append(f"<p class='footer'>Generated by Sarai AI · {e(model)} · {generated}</p>")
+    out.append(f"<p class='footer'>Generated by Sarai AI · {escape(model)} · {generated}</p>")
     out.append("</body></html>")
     return "\n".join(out)
 

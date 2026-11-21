@@ -96,7 +96,7 @@ export interface MeetingListItem {
   has_summary?: boolean;
 }
 
-export interface MinutesJSON {
+export interface MinutesContent {
   title: string;
   meeting_date?: string | null;
   attendees?: Attendee[];
@@ -163,4 +163,18 @@ export interface MeetingDetail {
   has_summary?: boolean;
   error?: string | null;
   detail?: string | null;
+}
+
+export interface MinutesJSON {
+  title: string;
+  meeting_date?: string | null;
+  attendees?: Attendee[];
+  summary?: string;
+  agenda?: string[];
+  discussion?: DiscussionTopic[];
+  decisions?: Decision[];
+  action_items?: ActionItem[];
+  open_questions?: string[];
+  next_meeting?: string | null;
+  english?: MinutesContent | null;
 }

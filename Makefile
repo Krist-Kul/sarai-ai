@@ -37,10 +37,10 @@ web: ## Run the Vite dev server
 	cd web && SARAI_API_URL=http://localhost:$(API_PORT) $(NPM) run dev
 
 .PHONY: dev
-dev: ## Run API + worker + web together (Ctrl-C stops all three)
+dev: ## Run API + worker + web together, both Python sides reload on code change (Ctrl-C stops all three)
 	@trap 'kill 0' EXIT INT TERM; \
 	$(MAKE) api & \
-	$(MAKE) worker & \
+	WORKER_RELOAD=true $(MAKE) worker & \
 	$(MAKE) web & \
 	wait
 

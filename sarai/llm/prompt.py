@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from sarai import thai
 from sarai.meeting_types import profile
-from sarai.models import MeetingType, MinutesJSON, Segment, SummarizeInput
+from sarai.models import MeetingType, MinutesContent, MinutesJSON, Segment, SummarizeInput
 
 _SYSTEM_TEMPLATE = """\
 {persona} You receive a diarized transcript of a real meeting.
@@ -106,6 +106,29 @@ RULES:
 
 def reduce_prompt(meeting_type: MeetingType = MeetingType.GENERAL) -> str:
     return _REDUCE_TEMPLATE.replace("{summary_guidance}", profile(meeting_type).summary_guidance)
+
+
+TRANSLATE_PROMPT = """\
+You translate finished meeting minutes into English for readers who do not
+read Thai. You receive the minutes as JSON.
+
+OUTPUT: valid JSON only, in exactly the same schema. No markdown fences.
+
+RULES:
+1. Translate every text value into natural, professional English. Text that is
+   already English stays as it is.
+2. Keep the structure: the same keys, the same lists in the same order, the
+   same number of items in each list.
+3. Keep "source_quote" verbatim, untranslated: it is evidence of what was said.
+4. Write people's names in English letters (คุณสมชาย -> Khun Somchai). Keep
+   figures, dates and times exactly as given; null stays null.
+5. Add nothing and leave nothing out. This is a translation, not a rewrite.
+"""
+
+
+def build_translate_message(minutes: MinutesContent) -> str:
+    content = MinutesContent.model_validate(minutes.model_dump())
+    return f"Translate these minutes:\n\n{content.model_dump_json(indent=None)}"
 
 
 def format_timestamp(seconds: float) -> str:

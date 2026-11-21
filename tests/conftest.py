@@ -24,6 +24,17 @@ def isolated_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterat
     get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def no_llm_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Provider retries back off for real seconds; no test should wait on them."""
+    import sarai.llm.client as client_mod
+
+    async def skip(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(client_mod, "_sleep", skip)
+
+
 @pytest.fixture
 def conn() -> Iterator[object]:
     with db.connection() as c:

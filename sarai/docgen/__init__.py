@@ -8,7 +8,10 @@ script, so without `w:cs` Word picks its own substitute font, and without
 `w:szCs` it renders at the wrong point size. Missing either is invisible on a
 developer machine with Sarabun installed and obvious to everyone else.
 
-The section order is the one Thai minutes are read in: attendees, summary,
+The document has two parts: the minutes as written (Thai), then the same
+minutes translated into English (`MinutesJSON.english`), each with its own
+headings. Within a part, the section order is the one Thai minutes are read
+in: attendees, summary,
 agenda, discussion, decisions, action items, open questions. Action items are
 the section people actually act on, so they get a table. The summary and
 discussion headings follow the meeting type (sarai/meeting_types.py).
@@ -28,9 +31,11 @@ from docx.shared import Pt, RGBColor
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
+from sarai.docgen import labels as L
 from sarai.docgen.fonts import FONT_NAME, embed_fonts
+from sarai.docgen.labels import Lang
 from sarai.meeting_types import profile
-from sarai.models import MeetingType, MinutesJSON
+from sarai.models import MeetingType, MinutesContent, MinutesJSON
 
 log = logging.getLogger("sarai.docgen")
 
@@ -96,35 +101,33 @@ def _bullet(doc: Document, text: str, *, prefix: str = "•") -> Paragraph:
     return para
 
 
-def _bilingual(thai_label: str, english_label: str) -> str:
-    return f"{thai_label} / {english_label}"
+def _label(labels: tuple[str, str], lang: Lang) -> str:
+    """A (thai, english) heading pair, in the language of the part."""
+    return labels[0] if lang == "th" else labels[1]
 
 
-def _attendee_table(doc: Document, minutes: MinutesJSON) -> None:
-    table = doc.add_table(rows=0, cols=2)
+def _attendee_table(doc: Document, content: MinutesContent, lang: Lang) -> None:
+    table = doc.add_table(rows=1, cols=2)
     table.style = "Table Grid"
-    for attendee in minutes.attendees:
+    header = table.rows[0].cells
+    for cell, label in zip(header, (_label(L.NAME, lang), _label(L.ROLE, lang)), strict=True):
+        styled_run(cell.paragraphs[0], label, bold=True, size=SMALL_PT + 1)
+    for attendee in content.attendees:
         row = table.add_row().cells
         styled_run(row[0].paragraphs[0], attendee.name)
         styled_run(row[1].paragraphs[0], attendee.role or "—")
 
 
-def _action_table(doc: Document, minutes: MinutesJSON) -> None:
+def _action_table(doc: Document, content: MinutesContent, lang: Lang) -> None:
     table = doc.add_table(rows=1, cols=3)
     table.style = "Table Grid"
     header = table.rows[0].cells
     for cell, label in zip(
-        header,
-        (
-            _bilingual("สิ่งที่ต้องทำ", "Task"),
-            _bilingual("ผู้รับผิดชอบ", "Owner"),
-            _bilingual("กำหนดส่ง", "Due"),
-        ),
-        strict=True,
+        header, (_label(L.TASK, lang), _label(L.OWNER, lang), _label(L.DUE, lang)), strict=True
     ):
         styled_run(cell.paragraphs[0], label, bold=True, size=SMALL_PT + 1)
 
-    for item in minutes.action_items:
+    for item in content.action_items:
         cells = table.add_row().cells
         styled_run(cells[0].paragraphs[0], item.task)
         styled_run(cells[1].paragraphs[0], item.owner or "—")
@@ -136,6 +139,71 @@ def _action_table(doc: Document, minutes: MinutesJSON) -> None:
         )
 
 
+def _part(doc: Document, content: MinutesContent, lang: Lang, meeting_type: MeetingType) -> None:
+    """One language's full minutes. The part is not labelled: its headings
+    already show which language it is."""
+    labels = profile(meeting_type)
+
+    title = doc.add_paragraph()
+    title.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    styled_run(title, content.title, size=H1_PT, bold=True)
+
+    meta = doc.add_paragraph()
+    styled_run(meta, f"{_label(L.DATE, lang)}: {content.meeting_date or '—'}", size=SMALL_PT)
+
+    notice = doc.add_paragraph()
+    notice.paragraph_format.space_before = Pt(4)
+    notice.paragraph_format.space_after = Pt(8)
+    styled_run(
+        notice, _label(L.AI_NOTICE, lang), size=SMALL_PT, italic=True, color=(0x9A, 0x34, 0x12)
+    )
+
+    if content.attendees:
+        _heading(doc, _label(L.ATTENDEES, lang))
+        _attendee_table(doc, content, lang)
+
+    if content.summary:
+        _heading(doc, _label(labels.summary_label, lang))
+        _body(doc, content.summary)
+
+    if content.agenda:
+        _heading(doc, _label(L.AGENDA, lang))
+        for index, item in enumerate(content.agenda, start=1):
+            _bullet(doc, item, prefix=f"{index}.")
+
+    if content.discussion:
+        _heading(doc, _label(labels.discussion_label, lang))
+        for topic in content.discussion:
+            _heading(doc, topic.topic, size=BODY_PT + 1, space_before=8)
+            for point in topic.points:
+                _bullet(doc, point)
+
+    if content.decisions:
+        _heading(doc, _label(L.DECISIONS, lang))
+        for index, decision in enumerate(content.decisions, start=1):
+            _bullet(doc, decision.decision, prefix=f"{index}.")
+            if decision.rationale:
+                para = doc.add_paragraph()
+                para.paragraph_format.left_indent = Pt(36)
+                styled_run(para, decision.rationale, size=SMALL_PT, italic=True)
+
+    if content.action_items:
+        # The section people actually read; a long document should not make
+        # them hunt for it across a page break.
+        doc.add_page_break()  # type: ignore[no-untyped-call]
+        _heading(doc, _label(L.ACTIONS, lang), size=H2_PT + 1)
+        _action_table(doc, content, lang)
+
+    if content.open_questions:
+        _heading(doc, _label(L.OPEN_QUESTIONS, lang))
+        for question in content.open_questions:
+            _bullet(doc, question)
+
+    if content.next_meeting:
+        _heading(doc, _label(L.NEXT_MEETING, lang))
+        _body(doc, content.next_meeting)
+
+
 def render(
     minutes: MinutesJSON,
     dest: Path,
@@ -143,70 +211,17 @@ def render(
     model: str,
     meeting_type: MeetingType = MeetingType.GENERAL,
 ) -> Path:
-    """Write the minutes to `dest`. Returns the path written."""
+    """Write the minutes to `dest`: the Thai part, then the English part on a
+    new page when there is a translation. Returns the path written."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    labels = profile(meeting_type)
     doc = new_document()
 
-    title = doc.add_paragraph()
-    title.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    styled_run(title, minutes.title, size=H1_PT, bold=True)
+    _part(doc, minutes, "th", meeting_type)
+    if minutes.english is not None:
+        doc.add_page_break()  # type: ignore[no-untyped-call]
+        _part(doc, minutes.english, "en", meeting_type)
 
     generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    meta = doc.add_paragraph()
-    styled_run(
-        meta,
-        f"{_bilingual('วันที่ประชุม', 'Date')}: {minutes.meeting_date or '—'}",
-        size=SMALL_PT,
-    )
-
-    if minutes.attendees:
-        _heading(doc, _bilingual("ผู้เข้าร่วมประชุม", "Attendees"))
-        _attendee_table(doc, minutes)
-
-    if minutes.summary:
-        _heading(doc, _bilingual(*labels.summary_label))
-        _body(doc, minutes.summary)
-
-    if minutes.agenda:
-        _heading(doc, _bilingual("วาระการประชุม", "Agenda"))
-        for index, item in enumerate(minutes.agenda, start=1):
-            _bullet(doc, item, prefix=f"{index}.")
-
-    if minutes.discussion:
-        _heading(doc, _bilingual(*labels.discussion_label))
-        for topic in minutes.discussion:
-            _heading(doc, topic.topic, size=BODY_PT + 1, space_before=8)
-            if topic.speakers:
-                _body(doc, ", ".join(topic.speakers), size=SMALL_PT, italic=True)
-            for point in topic.points:
-                _bullet(doc, point)
-
-    if minutes.decisions:
-        _heading(doc, _bilingual("มติที่ประชุม", "Decisions"))
-        for index, decision in enumerate(minutes.decisions, start=1):
-            _bullet(doc, decision.decision, prefix=f"{index}.")
-            if decision.rationale:
-                para = doc.add_paragraph()
-                para.paragraph_format.left_indent = Pt(36)
-                styled_run(para, decision.rationale, size=SMALL_PT, italic=True)
-
-    if minutes.action_items:
-        # The section people actually read; a long document should not make
-        # them hunt for it across a page break.
-        doc.add_page_break()  # type: ignore[no-untyped-call]
-        _heading(doc, _bilingual("สิ่งที่ต้องดำเนินการ", "Action items"), size=H2_PT + 1)
-        _action_table(doc, minutes)
-
-    if minutes.open_questions:
-        _heading(doc, _bilingual("ประเด็นค้าง", "Open questions"))
-        for question in minutes.open_questions:
-            _bullet(doc, question)
-
-    if minutes.next_meeting:
-        _heading(doc, _bilingual("การประชุมครั้งต่อไป", "Next meeting"))
-        _body(doc, minutes.next_meeting)
-
     footer = doc.add_paragraph()
     footer.paragraph_format.space_before = Pt(24)
     styled_run(

@@ -10,6 +10,10 @@ Three things happen here and nowhere else:
    dropped. An invented quote means an invented commitment, and a meeting
    participant assigned work they never agreed to is the worst failure this
    system can produce.
+
+The final minutes are then translated into English in one more call, for the
+English half of the document. That call runs last, on the verified minutes,
+so it never sees an action item that was dropped.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
+from typing import TypeVar
 
 from pydantic import ValidationError
 
@@ -25,7 +30,7 @@ from sarai import thai
 from sarai.config import Settings
 from sarai.llm import chunk, prompt
 from sarai.llm.client import Chat, LLMError, get_chat
-from sarai.models import MinutesJSON, Segment, SummarizeInput
+from sarai.models import MinutesContent, MinutesJSON, Segment, SummarizeInput
 
 log = logging.getLogger("sarai.llm")
 
@@ -70,16 +75,19 @@ def verify_quotes(minutes: MinutesJSON, segments: list[Segment]) -> tuple[Minute
     return minutes, dropped
 
 
-async def _call_validated(chat: Chat, system: str, user: str) -> MinutesJSON:
+M = TypeVar("M", bound=MinutesContent)
+
+
+async def _call_validated(chat: Chat, system: str, user: str, schema: type[M]) -> M:
     """One call, one retry showing the model its validation error, then fail."""
     raw = _strip_fence(await chat.complete(system, user))
     try:
-        return MinutesJSON.model_validate_json(raw)
+        return schema.model_validate_json(raw)
     except ValidationError as first:
         log.warning("model returned invalid minutes JSON; retrying with the error")
         retry = await chat.complete(system, prompt.retry_message(user, str(first)))
         try:
-            return MinutesJSON.model_validate_json(_strip_fence(retry))
+            return schema.model_validate_json(_strip_fence(retry))
         except ValidationError as second:
             raise LLMError(
                 "The model returned minutes that do not match the required schema, "
@@ -109,7 +117,7 @@ async def summarize(
     if total <= settings.llm_single_call_chars:
         if on_progress:
             on_progress(0.3, f"summarizing {len(inp.segments)} segments")
-        minutes = await _call_validated(client, system, prompt.build_user_message(inp))
+        minutes = await _call_validated(client, system, prompt.build_user_message(inp), MinutesJSON)
     else:
         chunks = chunk.split_segments(
             inp.segments,
@@ -123,12 +131,17 @@ async def summarize(
                 # Reserve the last fifth of the stage for the reduce call.
                 on_progress(0.8 * index / len(chunks), f"part {index} of {len(chunks)}")
             parts.append(
-                await _call_validated(client, system, prompt.build_user_message(inp, part))
+                await _call_validated(
+                    client, system, prompt.build_user_message(inp, part), MinutesJSON
+                )
             )
         if on_progress:
             on_progress(0.85, f"merging {len(parts)} parts")
         minutes = await _call_validated(
-            client, prompt.reduce_prompt(inp.meeting_type), prompt.build_reduce_message(parts)
+            client,
+            prompt.reduce_prompt(inp.meeting_type),
+            prompt.build_reduce_message(parts),
+            MinutesJSON,
         )
 
     # The model is told to use the meeting's own title and date; if it invented
@@ -139,7 +152,31 @@ async def summarize(
         minutes = minutes.model_copy(update={"meeting_date": inp.meeting_date})
 
     minutes, dropped = verify_quotes(minutes, inp.segments)
+
+    if on_progress:
+        on_progress(0.9, "translating the minutes into English")
+    minutes = await translate(client, minutes)
     return minutes, client.model, dropped
+
+
+async def translate(chat: Chat, minutes: MinutesJSON) -> MinutesJSON:
+    """Attach the English translation. A failed translation leaves `english`
+    as None -- the Thai minutes are finished and worth keeping without it."""
+    try:
+        english = await _call_validated(
+            chat, prompt.TRANSLATE_PROMPT, prompt.build_translate_message(minutes), MinutesContent
+        )
+    except LLMError:
+        log.exception("English translation failed; keeping the Thai minutes only")
+        return minutes
+    # Evidence is never translated: the quotes stay what was said in the room.
+    if len(english.action_items) == len(minutes.action_items):
+        items = [
+            en.model_copy(update={"source_quote": th.source_quote})
+            for en, th in zip(english.action_items, minutes.action_items, strict=True)
+        ]
+        english = english.model_copy(update={"action_items": items})
+    return minutes.model_copy(update={"english": english})
 
 
 def minutes_to_json(minutes: MinutesJSON) -> str:

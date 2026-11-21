@@ -33,6 +33,9 @@ class FakeChat:
 
     async def complete(self, system: str, user: str) -> str:
         self.calls.append((system, user))
+        if not self.responses and system == prompt.TRANSLATE_PROMPT:
+            # A test that queued nothing for the translation gets the minutes back.
+            return user.split("\n\n", 1)[1]
         if not self.responses:
             raise AssertionError("FakeChat ran out of responses")
         return self.responses.pop(0)
@@ -114,12 +117,15 @@ def test_quote_matching_ignores_whitespace_differences() -> None:
 
 async def test_short_meeting_uses_a_single_call() -> None:
     settings = get_settings()
-    chat = FakeChat([minutes_json()])
+    chat = FakeChat([minutes_json(), minutes_json(title="Team meeting")])
     inp = SummarizeInput(title="ประชุมทีม", segments=[seg(0, "สวัสดีครับ")])
 
     minutes, model, dropped = await summarize_mod.summarize(inp, settings, chat=chat)
 
-    assert len(chat.calls) == 1
+    # The minutes, then their English translation.
+    assert len(chat.calls) == 2
+    assert chat.calls[1][0] == prompt.TRANSLATE_PROMPT
+    assert minutes.english is not None and minutes.english.title == "Team meeting"
     assert model == "fake-model"
     assert dropped == 0
     assert minutes.title == "ประชุมทีม"
@@ -134,9 +140,9 @@ async def test_long_meeting_maps_then_reduces() -> None:
 
     await summarize_mod.summarize(SummarizeInput(segments=segments), settings, chat=chat)
 
-    # One call per chunk, plus the reduce call at the end.
-    assert len(chat.calls) >= 3
-    assert chat.calls[-1][0].startswith("You are merging partial meeting minutes")
+    # One call per chunk, the reduce call, then the translation.
+    assert len(chat.calls) >= 4
+    assert chat.calls[-2][0].startswith("You are merging partial meeting minutes")
 
 
 async def test_invalid_json_is_retried_once_with_the_validation_error() -> None:
@@ -147,7 +153,7 @@ async def test_invalid_json_is_retried_once_with_the_validation_error() -> None:
         SummarizeInput(segments=[seg(0, "สวัสดี")]), settings, chat=chat
     )
 
-    assert len(chat.calls) == 2
+    assert len(chat.calls) == 3  # first try, retry, translation
     # The retry shows the model what the validator complained about.
     assert "did not validate" in chat.calls[1][1]
     assert minutes.summary == "สรุปการประชุม"
@@ -226,7 +232,7 @@ async def test_meeting_type_reaches_map_and_reduce_prompts() -> None:
     )
     segments = [seg(i, "ก" * 60) for i in range(8)]
     # One response per map call plus the reduce; extras are never consumed.
-    chat = FakeChat([minutes_json()] * (len(segments) + 1))
+    chat = FakeChat([minutes_json()] * (len(segments) + 2))
     inp = SummarizeInput(meeting_type=MeetingType.LECTURE, segments=segments)
 
     await summarize_mod.summarize(inp, settings, chat=chat)
@@ -234,5 +240,27 @@ async def test_meeting_type_reaches_map_and_reduce_prompts() -> None:
     lecture = meeting_types.profile(MeetingType.LECTURE)
     systems = [system for system, _ in chat.calls]
     assert len(systems) > 2  # really went through map-reduce
+    assert systems[-1] == prompt.TRANSLATE_PROMPT
+    systems = systems[:-1]
     assert all(lecture.summary_guidance in s for s in systems)
     assert systems[-1] == prompt.reduce_prompt(MeetingType.LECTURE)
+
+
+async def test_translation_keeps_the_original_quotes() -> None:
+    minutes = MinutesJSON.model_validate(
+        {"title": "t", "action_items": [{"task": "ส่ง", "source_quote": "จะส่งให้"}]}
+    )
+    english = minutes_json(
+        title="t", action_items=[{"task": "Send", "source_quote": "will send it"}]
+    )
+    out = await summarize_mod.translate(FakeChat([english]), minutes)
+    assert out.english is not None
+    assert out.english.action_items[0].task == "Send"
+    assert out.english.action_items[0].source_quote == "จะส่งให้"
+
+
+async def test_failed_translation_keeps_the_thai_minutes() -> None:
+    minutes = MinutesJSON(title="t", summary="สรุป")
+    out = await summarize_mod.translate(FakeChat(["not json", "still not json"]), minutes)
+    assert out.english is None
+    assert out.summary == "สรุป"

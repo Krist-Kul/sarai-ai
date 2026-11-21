@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     worker_heartbeat_seconds: float = 10.0
     worker_stale_claim_minutes: int = 30
     worker_max_attempts: int = 3
+    # Development: restart the worker (when idle) after any sarai/*.py file
+    # changes, as uvicorn --reload does for the API. `make dev` turns it on.
+    worker_reload: bool = False
     ffmpeg_bin: str = "ffmpeg"
     ffprobe_bin: str = "ffprobe"
 
@@ -83,6 +86,11 @@ class Settings(BaseSettings):
     llm_chunk_chars: int = 30_000
     llm_chunk_overlap_segments: int = 2
     llm_timeout_seconds: float = 300.0
+    # Retries for temporary provider failures (429, 5xx, timeouts, dropped
+    # connections), with exponential backoff capped at the max wait. A
+    # Retry-After header from the provider wins, up to the same cap.
+    llm_retries: int = 5
+    llm_retry_max_wait_seconds: float = 60.0
 
     # Empty strings in a .env should read as "unset", not as a real key.
     @field_validator(

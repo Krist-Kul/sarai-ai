@@ -17,6 +17,7 @@ import sqlite3
 import sys
 import threading
 import time
+from pathlib import Path
 from types import FrameType
 
 from sarai import db
@@ -29,6 +30,20 @@ log = logging.getLogger("sarai.worker")
 
 _stop = False
 _in_job = False
+_restart = False
+
+SOURCE_DIR = Path(__file__).resolve().parents[1]  # the sarai package
+
+
+def source_stamp(root: Path = SOURCE_DIR) -> float:
+    """Newest mtime of any .py file under `root`.
+
+    A long-running worker keeps the modules it imported at start, but imports
+    some lazily per job. Edit the code under it and a job can mix old and new
+    modules -- "cannot import name X" from a file that plainly defines X.
+    With WORKER_RELOAD on, a changed stamp restarts the worker between jobs.
+    """
+    return max((p.stat().st_mtime for p in root.rglob("*.py")), default=0.0)
 
 
 def _handle_signal(signum: int, frame: FrameType | None) -> None:
@@ -194,13 +209,17 @@ def main() -> int:
     finally:
         stop_beating.set()
         beater.join(timeout=2.0)
+    if _restart:
+        log.info("worker %s restarting to load changed code", wid)
+        # Same pid, so `uv run` and `make dev` keep tracking it.
+        os.execv(sys.executable, [sys.executable, "-m", "sarai.worker.main"])
     log.info("worker %s stopped", wid)
     return 0
 
 
 def _serve(wid: str, settings: Settings) -> None:
     """Recover old claims, load models, then claim jobs until told to stop."""
-    global _in_job
+    global _in_job, _restart
     with db.connection() as conn:
         released = db.release_stale_claims(conn, settings.worker_stale_claim_minutes)
         released += recover_local_claims(conn, socket.gethostname())
@@ -219,7 +238,11 @@ def _serve(wid: str, settings: Settings) -> None:
             settings.llm_provider if settings.llm_enabled else "disabled",
         )
 
+        stamp = source_stamp() if settings.worker_reload else 0.0
         while not _stop:
+            if settings.worker_reload and source_stamp() != stamp:
+                _restart = True
+                return
             job = db.claim_job(conn, wid)
             if job is None:
                 time.sleep(settings.worker_poll_seconds)

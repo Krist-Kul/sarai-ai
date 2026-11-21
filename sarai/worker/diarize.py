@@ -43,6 +43,7 @@ GATE_HELP = (
     "community-1, so a 403 can name a repo you never configured."
 )
 
+
 class DiarizationSetupError(StageFailed):
     """The selected model cannot run with what is installed.
 

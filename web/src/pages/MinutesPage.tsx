@@ -275,6 +275,10 @@ export function MinutesPage() {
         </a>
       </div>
 
+      <Notice tone="danger" inline>
+        {t("aiNotice")}
+      </Notice>
+
       {regenerate.isSuccess && (
         <Notice
           tone="live"

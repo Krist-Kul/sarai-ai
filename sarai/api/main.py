@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Sarai AI", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Sarai AI", version="0.3.0", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
