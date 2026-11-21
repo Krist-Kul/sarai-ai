@@ -12,12 +12,15 @@ import signal
 import socket
 import sqlite3
 import subprocess
+import sys
 import time
+import types
 import uuid
 from pathlib import Path
 
 import pytest
 
+import sarai.worker
 from sarai import db
 from sarai.models import JobKind, LanguageHint, Meeting, Stage
 from sarai.worker.main import recover_local_claims, source_stamp
@@ -137,6 +140,12 @@ def test_worker_restarts_when_idle_after_a_code_change(
     monkeypatch.setenv("WORKER_RELOAD", "true")
     get_settings.cache_clear()
     monkeypatch.setattr(worker_main, "preload_models", lambda: None)
+    # The ready log line asks the ASR module for its backend; that module
+    # imports torch, which the API-only CI environment does not have.
+    fake_asr = types.ModuleType("sarai.worker.asr")
+    fake_asr.resolve_backend = lambda: "stub"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sarai.worker.asr", fake_asr)
+    monkeypatch.setattr(sarai.worker, "asr", fake_asr, raising=False)
     monkeypatch.setattr(signal, "signal", lambda *_a: None)
     monkeypatch.setattr(worker_main, "_restart", False)
     stamps = iter([1.0, 1.0, 2.0])  # start, first idle poll, then a file changed
