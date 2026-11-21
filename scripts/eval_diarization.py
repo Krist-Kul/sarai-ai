@@ -135,7 +135,7 @@ def find_pairs(data_dir: Path) -> list[tuple[Path, Path]]:
 def load_reference(rttm: Path, stem: str) -> Any:
     from pyannote.database.util import load_rttm
 
-    annotations = load_rttm(str(rttm))  # type: ignore[no-untyped-call]
+    annotations = load_rttm(str(rttm))  # type: ignore[no-untyped-call, unused-ignore]  # untyped only when pyannote is installed
     if not annotations:
         raise ValueError(f"{rttm} has no SPEAKER lines")
     if stem in annotations:
