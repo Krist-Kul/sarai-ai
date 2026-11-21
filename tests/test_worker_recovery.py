@@ -8,9 +8,11 @@ Waiting out the 30-minute stale window there would strand the job.
 from __future__ import annotations
 
 import os
+import signal
 import socket
 import sqlite3
 import subprocess
+import time
 import uuid
 from pathlib import Path
 
@@ -135,17 +137,17 @@ def test_worker_restarts_when_idle_after_a_code_change(
     monkeypatch.setenv("WORKER_RELOAD", "true")
     get_settings.cache_clear()
     monkeypatch.setattr(worker_main, "preload_models", lambda: None)
-    monkeypatch.setattr(worker_main.signal, "signal", lambda *_a: None)
+    monkeypatch.setattr(signal, "signal", lambda *_a: None)
     monkeypatch.setattr(worker_main, "_restart", False)
     stamps = iter([1.0, 1.0, 2.0])  # start, first idle poll, then a file changed
     monkeypatch.setattr(worker_main, "source_stamp", lambda: next(stamps))
-    monkeypatch.setattr(worker_main.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
     execs: list[list[str]] = []
 
     def fake_execv(_path: str, argv: list[str]) -> None:
         execs.append(argv)
 
-    monkeypatch.setattr(worker_main.os, "execv", fake_execv)
+    monkeypatch.setattr(os, "execv", fake_execv)
 
     worker_main.main()
 
